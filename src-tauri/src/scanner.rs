@@ -3,6 +3,7 @@ use lofty::file::{AudioFile, TaggedFileExt};
 use lofty::probe::Probe;
 use serde::Serialize;
 use std::path::Path;
+use lofty::tag::Accessor;
 
 // This struct defines the exact JSON shape React will receive.
 // The #[derive(Serialize)] macro automatically converts this Rust struct to a JS Object.
