@@ -7,7 +7,7 @@ use tauri::State;
 // This struct holds our audio engine safely across threads
 pub struct AudioState {
     pub player: Mutex<Option<Player>>,
-    pub _stream: Mutex<Option<MixerDeviceSink>>, // We must keep the stream alive
+    pub _stream: Mutex<Option<MixerDeviceSink>>,
 }
 
 impl Default for AudioState {
