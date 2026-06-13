@@ -1,5 +1,4 @@
 import { Track, theme } from "../types";
-import { formatTime } from "../utils";
 
 interface PlayerDockProps {
     currentTrack: Track | null;
@@ -17,16 +16,43 @@ interface PlayerDockProps {
 
 export default function PlayerDock({ currentTrack, albumArt, isPlaying, progress, togglePause, playNext, playPrev, handleSeek, volume, handleVolumeChange, toggleMute }: PlayerDockProps) {
 
-    // Calculate percentage for the progress bar
     const progressPercent = currentTrack && currentTrack.duration > 0
         ? (progress / currentTrack.duration) * 100
         : 0;
 
     return (
         <div style={{ padding: "0 1rem 1rem 1rem" }}>
+
+            {/* Custom CSS to hide the bulky HTML range slider thumb */}
+            <style>{`
+                .slim-slider {
+                    -webkit-appearance: none;
+                    height: 3px;
+                    border-radius: 2px;
+                    outline: none;
+                    transition: opacity 0.2s;
+                }
+                .slim-slider::-webkit-slider-thumb {
+                    -webkit-appearance: none;
+                    appearance: none;
+                    width: 0px; 
+                    height: 0px;
+                }
+                .icon-btn {
+                    background: none;
+                    border: none;
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    transition: opacity 0.2s, transform 0.1s;
+                }
+                .icon-btn:active { transform: scale(0.9); }
+            `}</style>
+
             <div style={{
-                position: "relative", // Required to pin the progress bar to the top
-                overflow: "hidden",   // Forces the progress bar to clip to the rounded corners
+                position: "relative",
+                overflow: "hidden",
                 height: "85px",
                 backgroundColor: theme.surfaceSolid,
                 borderRadius: "24px",
@@ -38,25 +64,17 @@ export default function PlayerDock({ currentTrack, albumArt, isPlaying, progress
                 border: `1px solid ${theme.border}`
             }}>
 
-                {/* --- 1. FULL-WIDTH TOP PROGRESS BAR --- */}
-                {/* Invisible thicker area so it's easy to click/drag with the mouse */}
+                {/* --- TOP EDGE PROGRESS BAR --- */}
                 <div
                     onClick={handleSeek}
-                    style={{
-                        position: "absolute", top: 0, left: 0, right: 0, height: "12px",
-                        cursor: "pointer", zIndex: 10, display: "flex", alignItems: "flex-start"
-                    }}
+                    style={{ position: "absolute", top: 0, left: 0, right: 0, height: "12px", cursor: "pointer", zIndex: 10, display: "flex", alignItems: "flex-start" }}
                 >
-                    {/* Faded Background Line */}
                     <div style={{ width: "100%", height: "3px", backgroundColor: "rgba(157, 136, 255, 0.15)", position: "absolute", top: 0 }} />
-
-                    {/* Active Purple Line */}
                     <div style={{ width: `${progressPercent}%`, height: "3px", backgroundColor: theme.primary, position: "absolute", top: 0, transition: "width 0.25s linear" }} />
                 </div>
-                {/* -------------------------------------- */}
 
 
-                {/* Left: Album Art & Info */}
+                {/* LEFT: Album Art & Info */}
                 <div style={{ display: "flex", alignItems: "center", gap: "15px", width: "30%" }}>
                     {currentTrack && (
                         <>
@@ -73,56 +91,97 @@ export default function PlayerDock({ currentTrack, albumArt, isPlaying, progress
                     )}
                 </div>
 
-                {/* Center: Controls & Timestamps */}
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "40%", gap: "25px" }}>
+                {/* CENTER: Transport Controls (Outline Style) */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "40%", gap: "30px" }}>
 
-                    {/* Current Time */}
-                    <span style={{ fontSize: "0.75rem", color: theme.textMuted, width: "35px", textAlign: "right", fontWeight: "500", opacity: 0.8 }}>
-                        {currentTrack ? formatTime(progress) : "0:00"}
-                    </span>
-
-                    <button onClick={playPrev} style={{ background: "none", border: "none", cursor: "pointer", color: theme.textMuted }}>
-                        <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" /></svg>
+                    {/* Shuffle */}
+                    <button className="icon-btn" style={{ color: theme.textMuted }}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+                            <polyline points="16 3 21 3 21 8"></polyline><line x1="4" y1="20" x2="21" y2="3"></line><polyline points="21 16 21 21 16 21"></polyline><line x1="15" y1="15" x2="21" y2="21"></line><line x1="4" y1="4" x2="9" y2="9"></line>
+                        </svg>
                     </button>
 
-                    <button onClick={togglePause} style={{
-                        width: "45px", height: "45px", borderRadius: "50%", border: "none", backgroundColor: theme.primary, color: "#fff",
-                        display: "flex", justifyContent: "center", alignItems: "center", cursor: "pointer", boxShadow: "0 4px 15px rgba(157, 136, 255, 0.4)"
+                    {/* Previous */}
+                    <button onClick={playPrev} className="icon-btn" style={{ color: theme.textMuted }}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20">
+                            <polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5"></line>
+                        </svg>
+                    </button>
+
+                    {/* Play/Pause (Circular Outline) */}
+                    <button onClick={togglePause} className="icon-btn" style={{
+                        width: "45px", height: "45px", borderRadius: "50%",
+                        border: `1.5px solid ${theme.primary}`, color: theme.primary
                     }}>
                         {isPlaying ? (
-                            <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+                                <rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect>
+                            </svg>
                         ) : (
-                            <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24" style={{ marginLeft: "2px" }}><path d="M8 5v14l11-7z" /></svg>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" style={{ marginLeft: "3px" }}>
+                                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                            </svg>
                         )}
                     </button>
 
-                    <button onClick={playNext} style={{ background: "none", border: "none", cursor: "pointer", color: theme.textMuted }}>
-                        <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M8 18l8.5-6L8 6v12zM16 6v12h2V6h-2z" /></svg>
+                    {/* Next */}
+                    <button onClick={playNext} className="icon-btn" style={{ color: theme.textMuted }}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20">
+                            <polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line>
+                        </svg>
                     </button>
 
-                    {/* Total Time */}
-                    <span style={{ fontSize: "0.75rem", color: theme.textMuted, width: "35px", fontWeight: "500", opacity: 0.8 }}>
-                        {currentTrack ? formatTime(currentTrack.duration) : "0:00"}
-                    </span>
+                    {/* Repeat */}
+                    <button className="icon-btn" style={{ color: theme.textMuted }}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+                            <polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+                        </svg>
+                    </button>
 
                 </div>
 
-                {/* Right: Volume Controls */}
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "10px", width: "30%" }}>
-                    <button onClick={toggleMute} style={{ background: "transparent", border: "none", color: theme.textMuted, cursor: "pointer", padding: 0, display: "flex", alignItems: "center" }}>
-                        {volume === 0 ? (
-                            <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" /></svg>
-                        ) : volume < 50 ? (
-                            <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" /></svg>
-                        ) : (
-                            <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" /></svg>
-                        )}
+                {/* RIGHT: Volume & Extras */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "20px", width: "30%" }}>
+
+                    {/* Volume Group */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                        <button onClick={toggleMute} className="icon-btn" style={{ color: theme.textMuted }}>
+                            {volume === 0 ? (
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+                                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line>
+                                </svg>
+                            ) : (
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+                                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+                                </svg>
+                            )}
+                        </button>
+
+                        <input
+                            type="range" min="0" max="100" value={volume} onChange={handleVolumeChange}
+                            className="slim-slider"
+                            style={{
+                                width: "70px", cursor: "pointer",
+                                // This background dynamically fills the slider line with purple vs gray
+                                background: `linear-gradient(to right, ${theme.primary} ${volume}%, rgba(0,0,0,0.1) ${volume}%)`
+                            }}
+                        />
+                    </div>
+
+                    {/* Heart */}
+                    <button className="icon-btn" style={{ color: theme.textMuted }}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+                            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                        </svg>
                     </button>
 
-                    <input
-                        type="range" min="0" max="100" value={volume} onChange={handleVolumeChange}
-                        style={{ width: "90px", cursor: "pointer", accentColor: theme.primary }}
-                    />
+                    {/* More (...) */}
+                    <button className="icon-btn" style={{ color: theme.textMuted }}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+                            <circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle>
+                        </svg>
+                    </button>
+
                 </div>
 
             </div>

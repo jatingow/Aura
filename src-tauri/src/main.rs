@@ -51,6 +51,7 @@ fn main() {
             audio::get_playback_position,
             audio::seek_to,
             audio::set_volume,
+            audio::refresh_audio_device,
             tray::send_app_to_tray
         ])
         .run(tauri::generate_context!())

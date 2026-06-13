@@ -7,11 +7,11 @@ export interface Track {
 }
 
 export const theme = {
-    background: "#cadcfbfd",
-    surface: "rgba(255, 255, 255, 0.89)",
+    background: "#ebedf4fd",
+    surface: "rgba(243, 243, 243, 0.89)",
     surfaceSolid: "#ffffff",
-    primary: "#9d88ff",
-    textDark: "#2d3748",
-    textMuted: "#a0aec0",
+    primary: "#4f83deff",
+    textDark: "#1a1919ff",
+    textMuted: "#7b7b7bff",
     border: "rgba(255, 255, 255, 0.4)",
 };

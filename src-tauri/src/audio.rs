@@ -111,3 +111,22 @@ pub fn set_volume(state: State<'_, AudioState>, volume: f32) {
         player.set_volume(volume);
     }
 }
+
+#[tauri::command]
+pub fn refresh_audio_device(state: State<'_, AudioState>) {
+    let mut stream_guard = state._stream.lock().unwrap();
+    let mut player_guard = state.player.lock().unwrap();
+    
+    // Build a fresh connection to the new default OS audio device
+    if let Ok(new_stream) = DeviceSinkBuilder::open_default_sink() {
+        let new_player = Player::connect_new(new_stream.mixer());
+        
+        // Inherit the volume level from the dead player so we don't blast the user's ears
+        if let Some(old_player) = player_guard.as_ref() {
+            new_player.set_volume(old_player.volume());
+        }
+        
+        *player_guard = Some(new_player);
+        *stream_guard = Some(new_stream);
+    }
+}
