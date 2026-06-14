@@ -75,7 +75,7 @@ export default function PlayerDock({ currentTrack, albumArt, isPlaying, progress
 
 
                 {/* LEFT: Album Art & Info */}
-                <div style={{ display: "flex", alignItems: "center", gap: "15px", width: "30%" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "15px", flex: 1, minWidth: 0 }}>
                     {currentTrack && (
                         <>
                             {albumArt ? (
@@ -83,16 +83,16 @@ export default function PlayerDock({ currentTrack, albumArt, isPlaying, progress
                             ) : (
                                 <div style={{ width: "50px", height: "50px", backgroundColor: theme.background, borderRadius: "12px" }} />
                             )}
-                            <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                                <strong style={{ display: "block", fontSize: "0.95rem", color: theme.textDark }}>{currentTrack.title}</strong>
-                                <span style={{ fontSize: "0.8rem", color: theme.textMuted }}>{currentTrack.artist}</span>
+                            <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+                                <strong style={{ fontSize: "0.95rem", color: theme.textDark, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{currentTrack.title}</strong>
+                                <span style={{ fontSize: "0.8rem", color: theme.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{currentTrack.artist}</span>
                             </div>
                         </>
                     )}
                 </div>
 
                 {/* CENTER: Transport Controls (Outline Style) */}
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "40%", gap: "30px" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, gap: "30px" }}>
 
                     {/* Shuffle */}
                     <button className="icon-btn" style={{ color: theme.textMuted }}>
@@ -141,7 +141,7 @@ export default function PlayerDock({ currentTrack, albumArt, isPlaying, progress
                 </div>
 
                 {/* RIGHT: Volume & Extras */}
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "20px", width: "30%" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "20px", flex: 1 }}>
 
                     {/* Volume Group */}
                     <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>

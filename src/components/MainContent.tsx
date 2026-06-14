@@ -67,7 +67,7 @@ export default function MainContent({ tracks, currentTrack, currentAlbumArt, han
                 {currentTrack ? "Now Playing" : "Releases for You"}
             </h2>
 
-            <div style={{ display: "flex", gap: "1.5rem", marginBottom: "1.5rem", flexShrink: 0 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "1.5rem", marginBottom: "1.5rem" }}>
 
                 {/* Left: Dynamic Hero Album Cover */}
                 <div style={{
@@ -89,7 +89,7 @@ export default function MainContent({ tracks, currentTrack, currentAlbumArt, han
                 </div>
 
                 {/* Right: Top Tracks List */}
-                <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "2px", justifyContent: "center" }}>
+                <div style={{ flex: "1 1 300px", display: "flex", flexDirection: "column", gap: "2px", justifyContent: "center" }}>
                     {featuredTracks.map((track, index) => (
                         <div key={index} onClick={() => handlePlayTrack(track)}
                             style={{

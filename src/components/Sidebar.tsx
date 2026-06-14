@@ -20,7 +20,7 @@ export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
     });
 
     return (
-        <div style={{ width: "240px", display: "flex", flexDirection: "column", padding: "1.5rem 1rem", gap: "2.5rem" }}>
+        <div style={{ width: "240px", flexShrink: 0, display: "flex", flexDirection: "column", padding: "1.5rem 1rem", gap: "2.5rem" }}>
 
             <h2 style={{ fontSize: "1.5rem", fontWeight: "bold", margin: 0, padding: "0 15px", color: theme.textDark }}>
                 Aura
