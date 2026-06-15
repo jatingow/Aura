@@ -31,18 +31,22 @@ pub fn play_audio(path: String, state: State<'_, AudioState>) {
         // Stop whatever is currently playing
         player.stop(); 
         
-        // Open the file and decode it
-        let file = File::open(&path).expect("Failed to open file");
-        
-        // Push the new track to the audio drivers
-        if let Ok(source) = Decoder::try_from(file) {
-            player.append(source);
-            player.play();
+        // FIX: Gracefully attempt to open the file instead of panicking on failure
+        if let Ok(file) = File::open(&path) {
+            // Push the new track to the audio drivers
+            if let Ok(source) = Decoder::try_from(file) {
+                player.append(source);
+                player.play();
+            } else {
+                println!("Failed to decode audio file at: {}", path);
+            }
         } else {
-            println!("Failed to decode audio file at: {}", path);
+            // If the file was moved or deleted, we just log it and move on without crashing
+            println!("File not found or unreadable: {}", path);
         }
     }
 }
+
 #[tauri::command]
 pub fn pause_audio(state: State<'_, AudioState>) {
     let player_guard = state.player.lock().unwrap();

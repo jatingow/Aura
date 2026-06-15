@@ -2,17 +2,46 @@ import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { register, unregisterAll } from "@tauri-apps/plugin-global-shortcut";
 
-// Import your new modular files
-import { Track, theme } from "./types";
+import { Track, theme, lightColors, darkColors } from "./types";
 import Sidebar from "./components/Sidebar";
 import MainContent from "./components/MainContent";
-import Settings from "./components/settings";
-// import ActivityPanel from "./components/ActivityPanel";
 import PlayerDock from "./components/PlayerDock";
+import Settings from "./components/Settings";
 
 export default function App() {
-  const [tracks, setTracks] = useState<Track[]>([]);
-  const [scanPath, setScanPath] = useState("C:\\Users\\Public\\Music");
+
+  // --- 💾 PERSISTENT STATE LOGIC ---
+  // We initialize state by checking localStorage first. If nothing is there, we fall back to defaults.
+
+  const [activeTab, setActiveTab] = useState(() => {
+    return localStorage.getItem("vibe_active_tab") || "home";
+  });
+
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    return localStorage.getItem("vibe_dark_mode") === "true";
+  });
+
+  useEffect(() => { localStorage.setItem("vibe_dark_mode", String(isDarkMode)); }, [isDarkMode]);
+
+  const [tracks, setTracks] = useState<Track[]>(() => {
+    const saved = localStorage.getItem("vibe_library");
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { return []; }
+    }
+    return [];
+  });
+
+  const [scanPath, setScanPath] = useState(() => {
+    return localStorage.getItem("vibe_scan_path") || "C:\\Users\\Public\\Music";
+  });
+
+  // Silently save to localStorage whenever these variables change
+  useEffect(() => { localStorage.setItem("vibe_active_tab", activeTab); }, [activeTab]);
+  useEffect(() => { localStorage.setItem("vibe_library", JSON.stringify(tracks)); }, [tracks]);
+  useEffect(() => { localStorage.setItem("vibe_scan_path", scanPath); }, [scanPath]);
+  // ---------------------------------
+
+
   const [isScanning, setIsScanning] = useState(false);
   const [albumArt, setAlbumArt] = useState<string | null>(null);
 
@@ -22,7 +51,6 @@ export default function App() {
 
   const [volume, setVolume] = useState(20);
   const [prevVolume, setPrevVolume] = useState(20);
-  const [activeTab, setActiveTab] = useState("home");
 
   // --- QUEUE LOGIC ---
   function playNext() {
@@ -47,7 +75,7 @@ export default function App() {
     }
   }
 
-  // --- GLOBAL SHORTCUTS ---
+  // --- GLOBAL & LOCAL SHORTCUTS ---
   const engineRef = useRef({ togglePause, playNext, playPrev });
   useEffect(() => {
     engineRef.current = { togglePause, playNext, playPrev };
@@ -70,46 +98,20 @@ export default function App() {
     return () => { unregisterAll().catch(console.error); };
   }, []);
 
-  // --- POLLING & AUTO-PLAY ---
-  useEffect(() => {
-    let interval: number;
-    if (isPlaying && currentTrack) {
-      interval = window.setInterval(async () => {
-        try {
-          const pos = await invoke<number>("get_playback_position");
-          setProgress(pos);
-          if (currentTrack.duration > 0 && pos >= currentTrack.duration - 0.2) playNext();
-        } catch (e) { }
-      }, 250);
-    }
-    return () => clearInterval(interval);
-  }, [isPlaying, currentTrack, tracks]);
-
-  // --- LOCAL KEYBOARD SHORTCUTS (Space to Play/Pause) ---
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // 1. Check if the key pressed was Space
       if (e.code === "Space") {
-
-        // 2. Make sure the user isn't currently typing in the search/input box
         if (document.activeElement?.tagName !== "INPUT" && document.activeElement?.tagName !== "TEXTAREA") {
-
-          e.preventDefault(); // Stop the spacebar from scrolling the page down
+          e.preventDefault();
           engineRef.current.togglePause();
-
         }
       }
     };
-
-    // Attach the listener to the whole window
     window.addEventListener("keydown", handleKeyDown);
-
-    // Clean up the listener when the component unmounts
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  const stateRef = useRef({ currentTrack, progress, isPlaying });
-  // --- PROGRESS POLLING & BULLETPROOF AUTO-RECOVERY ---
+  // --- AUDIO PIPELINE RECOVERY ---
   const lastPosRef = useRef(0);
   const stuckCountRef = useRef(0);
 
@@ -121,25 +123,16 @@ export default function App() {
           const pos = await invoke<number>("get_playback_position");
           setProgress(pos);
 
-          // THE HEARTBEAT MONITOR:
-          // If the song is playing but the timestamp hasn't moved...
           if (pos > 0 && pos === lastPosRef.current) {
             stuckCountRef.current += 1;
-
-            // If it's been frozen for 1 full second (4 ticks), the stream is dead.
             if (stuckCountRef.current >= 4) {
               console.log("Audio pipeline frozen. Forcing Rust reboot...");
-              stuckCountRef.current = 0; // Reset counter
-
-              // Nuke the dead stream and connect to the new default speakers
+              stuckCountRef.current = 0;
               await invoke("refresh_audio_device");
-
-              // Force the new stream to pick up exactly where we left off
               await invoke("play_audio", { path: currentTrack.path });
               await invoke("seek_to", { position: pos });
             }
           } else {
-            // Timestamp is moving normally, reset the stuck counter
             stuckCountRef.current = 0;
           }
           lastPosRef.current = pos;
@@ -154,26 +147,6 @@ export default function App() {
     }
     return () => clearInterval(interval);
   }, [isPlaying, currentTrack, tracks]);
-
-  useEffect(() => {
-    const handleDeviceChange = async () => {
-      console.log("Device change detected. Rebooting audio engine...");
-
-      // Tell Rust to hook into the new headphones/speakers
-      await invoke("refresh_audio_device");
-
-      const { currentTrack, progress, isPlaying } = stateRef.current;
-
-      // If a song was playing when the headphones unplugged, seamlessly resume it
-      if (isPlaying && currentTrack) {
-        await invoke("play_audio", { path: currentTrack.path });
-        await invoke("seek_to", { position: progress });
-      }
-    };
-    navigator.mediaDevices.addEventListener('devicechange', handleDeviceChange);
-
-    return () => navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange);
-  }, []);
 
   // --- CORE AUDIO ACTION ---
   async function handleScan() {
@@ -230,28 +203,44 @@ export default function App() {
     await invoke("seek_to", { position: targetTime });
   }
 
+  const activeColors = isDarkMode ? darkColors : lightColors;
+
   return (
     <div style={{
       display: "flex", flexDirection: "column", height: "100vh", width: "100vw", overflow: "hidden",
-      backgroundColor: theme.background, color: theme.textDark, fontFamily: "'Inter', sans-serif"
+      backgroundColor: theme.background, color: theme.textDark, fontFamily: "'Inter', sans-serif",
+      transition: "background-color 0.3s ease, color 0.3s ease" // Smooth fade when switching themes
     }}>
+
+      {/* --- INJECT THE CSS VARIABLES HERE --- */}
       <style>{`
+        :root {
+          --bg: ${activeColors.background};
+          --surface: ${activeColors.surface};
+          --surface-solid: ${activeColors.surfaceSolid};
+          --primary: ${activeColors.primary};
+          --text-dark: ${activeColors.textDark};
+          --text-muted: ${activeColors.textMuted};
+          --border: ${activeColors.border};
+        }
         body { margin: 0; padding: 0; overflow: hidden; }
         * { box-sizing: border-box; }
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb { background: rgba(157, 136, 255, 0.3); border-radius: 10px; }
       `}</style>
 
       {/* TOP LAYER: 3-Column Layout */}
       <div style={{ display: "flex", flex: 1, overflow: "hidden", padding: "1rem", gap: "1rem" }}>
+
         <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
 
-        {/* Conditionally render the MainContent OR Settings based on activeTab */}
         {activeTab === "settings" ? (
           <Settings
             scanPath={scanPath} setScanPath={setScanPath}
             isScanning={isScanning} handleScan={handleScan}
+            // Add the new props here:
+            isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode}
           />
         ) : (
           <MainContent

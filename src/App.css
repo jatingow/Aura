@@ -97,20 +97,29 @@ button {
 
 @media (prefers-color-scheme: dark) {
   :root {
-    color: #f6f6f6;
-    background-color: #2f2f2f;
+    color: #e2e8f0;
+    background-color: #0f172a;
   }
 
   a:hover {
-    color: #24c8db;
+    color: #38bdf8;
   }
 
   input,
   button {
     color: #ffffff;
-    background-color: #0f0f0f98;
+    background-color: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
   }
+
+  button:hover {
+    border-color: #38bdf8;
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+
   button:active {
-    background-color: #0f0f0f69;
+    border-color: #0ea5e9;
+    background-color: rgba(255, 255, 255, 0.03);
   }
 }
