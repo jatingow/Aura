@@ -1,4 +1,5 @@
 import { theme } from "../types";
+import { open } from "@tauri-apps/plugin-dialog"; // Import the native dialog API
 
 interface SettingsProps {
     scanPath: string;
@@ -10,6 +11,26 @@ interface SettingsProps {
 }
 
 export default function Settings({ scanPath, setScanPath, isScanning, handleScan, isDarkMode, setIsDarkMode }: SettingsProps) {
+
+    // --- NATIVE FOLDER PICKER LOGIC ---
+    async function handleBrowse() {
+        try {
+            const selectedPath = await open({
+                directory: true, // Force it to only select folders, not files
+                multiple: false,
+                title: "Select Music Folder",
+                defaultPath: scanPath // Open the dialog to whatever path is currently in the box
+            });
+
+            // If the user didn't cancel the dialog, update the state
+            if (selectedPath && typeof selectedPath === "string") {
+                setScanPath(selectedPath);
+            }
+        } catch (error) {
+            console.error("Failed to open dialog:", error);
+        }
+    }
+
     return (
         <div style={{
             flex: 1, backgroundColor: theme.surface, borderRadius: "24px",
@@ -34,7 +55,6 @@ export default function Settings({ scanPath, setScanPath, isScanning, handleScan
                         </p>
                     </div>
 
-                    {/* Animated Toggle Switch */}
                     <div
                         onClick={() => setIsDarkMode(!isDarkMode)}
                         style={{
@@ -64,9 +84,24 @@ export default function Settings({ scanPath, setScanPath, isScanning, handleScan
                 <div style={{ display: "flex", gap: "10px" }}>
                     <input
                         type="text" value={scanPath} onChange={(e) => setScanPath(e.target.value)}
-                        placeholder="Enter folder path (e.g., C:\Users\Public\Music)..."
+                        placeholder="Select a folder..."
                         style={{ flexGrow: 1, padding: "12px 18px", backgroundColor: "transparent", color: theme.textDark, border: `1px solid ${theme.border}`, borderRadius: "12px", outline: "none" }}
                     />
+
+                    {/* NEW BROWSE BUTTON */}
+                    <button
+                        onClick={handleBrowse}
+                        style={{
+                            padding: "12px 20px", backgroundColor: "transparent", color: theme.textDark,
+                            border: `1px solid ${theme.border}`, borderRadius: "12px", fontSize: "0.95rem",
+                            fontWeight: "600", cursor: "pointer", transition: "background 0.2s"
+                        }}
+                        onMouseOver={(e) => e.currentTarget.style.backgroundColor = "rgba(157, 136, 255, 0.1)"}
+                        onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                    >
+                        Browse
+                    </button>
+
                     <button
                         onClick={handleScan} disabled={isScanning}
                         style={{ padding: "12px 25px", backgroundColor: theme.primary, color: "#fff", border: "none", borderRadius: "12px", fontSize: "0.95rem", fontWeight: "bold", cursor: "pointer", boxShadow: "0 4px 15px rgba(157, 136, 255, 0.3)" }}
