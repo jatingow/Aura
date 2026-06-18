@@ -4,14 +4,12 @@ import { register, unregisterAll } from "@tauri-apps/plugin-global-shortcut";
 
 import { Track, theme, lightColors, darkColors } from "./types";
 import Sidebar from "./components/Sidebar";
+import Library from "./components/Library";
 import MainContent from "./components/MainContent";
 import PlayerDock from "./components/PlayerDock";
 import Settings from "./components/Settings";
 
 export default function App() {
-
-  // --- 💾 PERSISTENT STATE LOGIC ---
-  // We initialize state by checking localStorage first. If nothing is there, we fall back to defaults.
 
   const [activeTab, setActiveTab] = useState(() => {
     return localStorage.getItem("vibe_active_tab") || "home";
@@ -167,6 +165,19 @@ export default function App() {
     setAlbumArt(null);
     setProgress(0);
 
+    // --- TRACKING METRICS UPDATE ---
+    setTracks(prevTracks =>
+      prevTracks.map(t => {
+        if (t.path === track.path) {
+          return {
+            ...t,
+            playCount: (t.playCount || 0) + 1,
+            lastPlayed: Date.now()
+          };
+        }
+        return t;
+      })
+    );
     await invoke("play_audio", { path: track.path });
 
     try {
@@ -241,6 +252,11 @@ export default function App() {
             isScanning={isScanning} handleScan={handleScan}
             // Add the new props here:
             isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode}
+          />
+        ) : activeTab === "library" ? (
+          <Library
+            tracks={tracks}
+            handlePlayTrack={handlePlayTrack}
           />
         ) : (
           <MainContent

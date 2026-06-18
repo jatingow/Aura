@@ -4,6 +4,8 @@ export interface Track {
     album: string;
     path: string;
     duration: number;
+    playCount?: number;
+    lastPlayed?: number;
 }
 
 export const lightColors = {
