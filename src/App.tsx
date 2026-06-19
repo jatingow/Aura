@@ -150,15 +150,35 @@ export default function App() {
   async function handleScan() {
     setIsScanning(true);
     try {
-      const result = await invoke<Track[]>("scan_directory", { path: scanPath });
-      setTracks(result);
+      // 1. Get the new tracks from the scanned folder
+      const newTracks = await invoke<Track[]>("scan_directory", { path: scanPath });
+
+      // 2. Smart Merge into existing library
+      setTracks(prevTracks => {
+        const trackMap = new Map();
+
+        // Step A: Load all your existing tracks into a Map first. 
+        // This preserves your 'playCount' and 'lastPlayed' data!
+        prevTracks.forEach(t => trackMap.set(t.path, t));
+
+        // Step B: Add the newly scanned tracks.
+        // It will only add them if the file path doesn't already exist in the Map.
+        newTracks.forEach(t => {
+          if (!trackMap.has(t.path)) {
+            trackMap.set(t.path, t);
+          }
+        });
+
+        // Step C: Convert the Map back into a standard array for React
+        return Array.from(trackMap.values());
+      });
+
     } catch (error) {
       console.error(error);
     } finally {
       setIsScanning(false);
     }
   }
-
   async function handlePlayTrack(track: Track) {
     setCurrentTrack(track);
     setIsPlaying(true);

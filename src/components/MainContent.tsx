@@ -16,7 +16,7 @@ export default function MainContent({ tracks, currentTrack, currentAlbumArt, han
     const mostPlayed = [...tracks].sort((a, b) => (b.playCount || 0) - (a.playCount || 0)).slice(0, 5);
 
     // FIX: Sliced down to exactly 5 tracks for a cleaner, unified grid
-    let recentlyPlayed = [...tracks].filter(t => t.lastPlayed).sort((a, b) => (b.lastPlayed || 0) - (a.lastPlayed || 0)).slice(0, 5);
+    let recentlyPlayed = [...tracks].filter(t => t.lastPlayed).sort((a, b) => (b.lastPlayed || 0) - (a.lastPlayed || 0)).slice(0, 7);
 
     // Fallback if app is new and nothing has been played yet
     if (recentlyPlayed.length === 0) recentlyPlayed = tracks.slice(0, 5);
@@ -90,7 +90,7 @@ export default function MainContent({ tracks, currentTrack, currentAlbumArt, han
                 {/* CAROUSEL IMAGES: Increased width/height to 150px */}
                 {recentlyPlayed.map((track, index) => (
                     <div key={index} onClick={() => handlePlayTrack(track)} style={{ display: "flex", flexDirection: "column", cursor: "pointer", width: "150px", flexShrink: 0 }}>
-                        <div style={{ width: "150px", height: "150px", borderRadius: "16px", backgroundColor: theme.surfaceSolid, marginBottom: "10px", boxShadow: "0 4px 15px rgba(0,0,0,0.04)", overflow: "hidden" }}>
+                        <div style={{ width: "130px", height: "140px", borderRadius: "16px", backgroundColor: theme.surfaceSolid, marginBottom: "10px", boxShadow: "0 4px 15px rgba(0,0,0,0.04)", overflow: "hidden" }}>
                             {artCache[track.path] && <img src={artCache[track.path]} alt="Art" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
                         </div>
                         <strong style={{ display: "block", fontSize: "0.85rem", color: theme.textDark, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{track.title}</strong>
