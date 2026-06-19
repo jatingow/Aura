@@ -13,13 +13,13 @@ export default function MainContent({ tracks, currentTrack, currentAlbumArt, han
     const [artCache, setArtCache] = useState<Record<string, string>>({});
 
     // --- SORTING LOGIC ---
-    // 1. Most Played: Sort by playCount (descending)
     const mostPlayed = [...tracks].sort((a, b) => (b.playCount || 0) - (a.playCount || 0)).slice(0, 5);
 
-    // 2. Recently Played: Sort by lastPlayed timestamp
-    let recentlyPlayed = [...tracks].filter(t => t.lastPlayed).sort((a, b) => (b.lastPlayed || 0) - (a.lastPlayed || 0)).slice(0, 15);
+    // FIX: Sliced down to exactly 5 tracks for a cleaner, unified grid
+    let recentlyPlayed = [...tracks].filter(t => t.lastPlayed).sort((a, b) => (b.lastPlayed || 0) - (a.lastPlayed || 0)).slice(0, 5);
+
     // Fallback if app is new and nothing has been played yet
-    if (recentlyPlayed.length === 0) recentlyPlayed = tracks.slice(0, 15);
+    if (recentlyPlayed.length === 0) recentlyPlayed = tracks.slice(0, 5);
 
     useEffect(() => {
         async function fetchVisibleArt() {
@@ -37,7 +37,7 @@ export default function MainContent({ tracks, currentTrack, currentAlbumArt, han
             if (Object.keys(newArt).length > 0) setArtCache(prev => ({ ...prev, ...newArt }));
         }
         if (tracks.length > 0) fetchVisibleArt();
-    }, [tracks]);
+    }, [tracks, mostPlayed, recentlyPlayed]);
 
     const displayTrack = currentTrack || (mostPlayed.length > 0 ? mostPlayed[0] : null);
     const displayArt = currentTrack ? currentAlbumArt : (displayTrack ? artCache[displayTrack.path] : null);
@@ -60,7 +60,7 @@ export default function MainContent({ tracks, currentTrack, currentAlbumArt, han
 
             <div style={{ display: "flex", flexWrap: "wrap", gap: "1.5rem", marginBottom: "2rem", flexShrink: 0 }}>
                 <div style={{
-                    width: "210px", height: "210px", borderRadius: "20px", flexShrink: 0,
+                    width: "260px", height: "260px", borderRadius: "20px", flexShrink: 0,
                     background: displayArt ? `url(${displayArt}) center/cover no-repeat` : `linear-gradient(135deg, #b09fff, #f6e6ff)`,
                     boxShadow: "0 10px 30px rgba(0,0,0,0.06)", display: "flex", alignItems: "flex-end", padding: "1rem", position: "relative", overflow: "hidden", transition: "background 0.3s ease"
                 }}>
@@ -85,16 +85,16 @@ export default function MainContent({ tracks, currentTrack, currentAlbumArt, han
                 </div>
             </div>
 
-            {/* --- RECENTLY PLAYED HORIZONTAL CAROUSEL --- */}
-            <h2 style={{ fontSize: "1.1rem", fontWeight: "bold", margin: "0 0 0.8rem 0", color: theme.textDark }}>Recently Played</h2>
-            <div style={{ display: "flex", gap: "1rem", overflowX: "auto", paddingBottom: "1rem" }}>
+            <h2 style={{ fontSize: "1.2rem", fontWeight: "bold", margin: "0 0 1rem 0", color: theme.textDark }}>Recently Played</h2>
+            <div style={{ display: "flex", gap: "1.5rem", overflowX: "auto", paddingBottom: "1rem" }}>
+                {/* CAROUSEL IMAGES: Increased width/height to 150px */}
                 {recentlyPlayed.map((track, index) => (
-                    <div key={index} onClick={() => handlePlayTrack(track)} style={{ display: "flex", flexDirection: "column", cursor: "pointer", width: "120px", flexShrink: 0 }}>
-                        <div style={{ width: "120px", height: "120px", borderRadius: "14px", backgroundColor: theme.surfaceSolid, marginBottom: "6px", boxShadow: "0 4px 10px rgba(0,0,0,0.03)", overflow: "hidden" }}>
+                    <div key={index} onClick={() => handlePlayTrack(track)} style={{ display: "flex", flexDirection: "column", cursor: "pointer", width: "150px", flexShrink: 0 }}>
+                        <div style={{ width: "150px", height: "150px", borderRadius: "16px", backgroundColor: theme.surfaceSolid, marginBottom: "10px", boxShadow: "0 4px 15px rgba(0,0,0,0.04)", overflow: "hidden" }}>
                             {artCache[track.path] && <img src={artCache[track.path]} alt="Art" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
                         </div>
-                        <strong style={{ display: "block", fontSize: "0.8rem", color: theme.textDark, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{track.title}</strong>
-                        <span style={{ fontSize: "0.7rem", color: theme.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{track.artist}</span>
+                        <strong style={{ display: "block", fontSize: "0.85rem", color: theme.textDark, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{track.title}</strong>
+                        <span style={{ fontSize: "0.75rem", color: theme.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{track.artist}</span>
                     </div>
                 ))}
             </div>

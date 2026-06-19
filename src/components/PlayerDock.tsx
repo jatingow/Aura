@@ -111,17 +111,30 @@ export default function PlayerDock({ currentTrack, albumArt, isPlaying, progress
                     {/* Play/Pause (Circular Outline) */}
                     <button onClick={togglePause} className="icon-btn" style={{
                         width: "45px", height: "45px", borderRadius: "50%",
-                        border: `1.5px solid ${theme.primary}`, color: theme.primary
+                        backgroundColor: theme.primary, color: "#fff", border: "none",
+                        boxShadow: "0 4px 15px rgba(157, 136, 255, 0.4)"
                     }}>
                         {isPlaying ? (
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+                            <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
                                 <rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect>
                             </svg>
                         ) : (
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" style={{ marginLeft: "3px" }}>
+                            <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18" style={{ marginLeft: "3px" }}>
                                 <polygon points="5 3 19 12 5 21 5 3"></polygon>
                             </svg>
                         )}
+                    </button>
+
+                    <button onClick={playNext} className="icon-btn" style={{ color: theme.textMuted }}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20">
+                            <polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line>
+                        </svg>
+                    </button>
+
+                    <button className="icon-btn" style={{ color: theme.textMuted }}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+                            <polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+                        </svg>
                     </button>
 
                     {/* Next */}
