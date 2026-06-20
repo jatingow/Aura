@@ -8,6 +8,7 @@ import Library from "./components/Library";
 import MainContent from "./components/MainContent";
 import PlayerDock from "./components/PlayerDock";
 import Settings from "./components/Settings";
+import TopArtistsPanel from "./components/TopArtistsPanel";
 
 export default function App() {
 
@@ -279,10 +280,15 @@ export default function App() {
             handlePlayTrack={handlePlayTrack}
           />
         ) : (
-          <MainContent
-            tracks={tracks} currentTrack={currentTrack} currentAlbumArt={albumArt}
-            handlePlayTrack={handlePlayTrack}
-          />
+          <>
+            <MainContent
+              tracks={tracks} currentTrack={currentTrack} currentAlbumArt={albumArt}
+              handlePlayTrack={handlePlayTrack}
+            />
+            <TopArtistsPanel
+              tracks={tracks} handlePlayTrack={handlePlayTrack}
+            />
+          </>
         )}
       </div>
 
