@@ -7,6 +7,7 @@ interface MainContentProps {
     currentTrack: Track | null;
     currentAlbumArt: string | null;
     handlePlayTrack: (track: Track) => void;
+    handleContextMenu: (e: React.MouseEvent, track: Track) => void;
 }
 
 export default function MainContent({ tracks, currentTrack, currentAlbumArt, handlePlayTrack }: MainContentProps) {
@@ -16,7 +17,7 @@ export default function MainContent({ tracks, currentTrack, currentAlbumArt, han
     const mostPlayed = [...tracks].sort((a, b) => (b.playCount || 0) - (a.playCount || 0)).slice(0, 5);
 
     // FIX: Sliced down to exactly 5 tracks for a cleaner, unified grid
-    let recentlyPlayed = [...tracks].filter(t => t.lastPlayed).sort((a, b) => (b.lastPlayed || 0) - (a.lastPlayed || 0)).slice(0, 7);
+    let recentlyPlayed = [...tracks].filter(t => t.lastPlayed).sort((a, b) => (b.lastPlayed || 0) - (a.lastPlayed || 0)).slice(0, 5);
 
     // Fallback if app is new and nothing has been played yet
     if (recentlyPlayed.length === 0) recentlyPlayed = tracks.slice(0, 5);

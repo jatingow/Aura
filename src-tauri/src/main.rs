@@ -5,6 +5,37 @@ mod audio;
 mod tray;
 
 use tauri::{menu::{Menu, MenuItem}, tray::TrayIconBuilder, Manager};
+use std::process::Command;
+
+#[tauri::command]
+fn show_in_explorer(path: String) {
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("explorer")
+            .args(["/select,", &path]) // The comma is important for Windows to highlight the file
+            .spawn()
+            .unwrap();
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .args(["-R", &path]) // -R reveals the file in Finder
+            .spawn()
+            .unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        // Linux varies heavily, but usually opening the parent directory is the safest fallback
+        if let Some(parent) = std::path::Path::new(&path).parent() {
+            Command::new("xdg-open")
+                .arg(parent)
+                .spawn()
+                .unwrap();
+        }
+    }
+}
 
 fn main() {
     tauri::Builder::default()
@@ -54,7 +85,8 @@ fn main() {
             audio::seek_to,
             audio::set_volume,
             audio::refresh_audio_device,
-            tray::send_app_to_tray
+            tray::send_app_to_tray,
+            show_in_explorer
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

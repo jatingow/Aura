@@ -5,9 +5,10 @@ import { Track, theme } from "../types";
 interface LibraryProps {
     tracks: Track[];
     handlePlayTrack: (track: Track) => void;
+    handleContextMenu: (e: React.MouseEvent, track: Track) => void;
 }
 
-export default function Library({ tracks, handlePlayTrack }: LibraryProps) {
+export default function Library({ tracks, handlePlayTrack, handleContextMenu }: LibraryProps) {
     const [artCache, setArtCache] = useState<Record<string, string>>({});
 
     useEffect(() => {
@@ -39,7 +40,10 @@ export default function Library({ tracks, handlePlayTrack }: LibraryProps) {
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: "1.5rem", paddingBottom: "2rem" }}>
                 {tracks.map((track, index) => (
-                    <div key={index} onClick={() => handlePlayTrack(track)} style={{ display: "flex", flexDirection: "column", cursor: "pointer", transition: "transform 0.2s" }} onMouseOver={e => e.currentTarget.style.transform = "scale(1.02)"} onMouseOut={e => e.currentTarget.style.transform = "scale(1)"}>
+                    <div key={index}
+                        onClick={() => handlePlayTrack(track)}
+                        onContextMenu={(e) => handleContextMenu(e, track)}
+                        style={{ display: "flex", flexDirection: "column", cursor: "pointer", transition: "transform 0.2s" }} onMouseOver={e => e.currentTarget.style.transform = "scale(1.02)"} onMouseOut={e => e.currentTarget.style.transform = "scale(1)"}>
                         <div style={{ width: "100%", aspectRatio: "1 / 1", borderRadius: "16px", backgroundColor: theme.surfaceSolid, marginBottom: "10px", boxShadow: "0 4px 15px rgba(0,0,0,0.05)", overflow: "hidden" }}>
                             {artCache[track.path] ? (
                                 <img src={artCache[track.path]} alt="Album Art" style={{ width: "100%", height: "100%", objectFit: "cover" }} />

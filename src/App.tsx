@@ -9,6 +9,7 @@ import MainContent from "./components/MainContent";
 import PlayerDock from "./components/PlayerDock";
 import Settings from "./components/Settings";
 import TopArtistsPanel from "./components/TopArtistsPanel";
+import ContextMenu from "./components/ContextMenu";
 
 export default function App() {
 
@@ -20,6 +21,16 @@ export default function App() {
     return localStorage.getItem("vibe_dark_mode") === "true";
   });
 
+  const [menuState, setMenuState] = useState<{ visible: boolean, x: number, y: number, track: Track | null }>({
+    visible: false, x: 0, y: 0, track: null
+  });
+
+  const [queue, setQueue] = useState<Track[]>([]);
+
+  const handleContextMenu = (e: React.MouseEvent, track: Track) => {
+    e.preventDefault(); // Prevents the default browser right-click menu
+    setMenuState({ visible: true, x: e.clientX, y: e.clientY, track });
+  };
   useEffect(() => { localStorage.setItem("vibe_dark_mode", String(isDarkMode)); }, [isDarkMode]);
 
   const [tracks, setTracks] = useState<Track[]>(() => {
@@ -52,7 +63,22 @@ export default function App() {
   const [prevVolume, setPrevVolume] = useState(20);
 
   // --- QUEUE LOGIC ---
+
+  function addToQueue(track: Track) {
+    setQueue(prev => [...prev, track]);
+  }
+
+  function insertNext(track: Track) {
+    setQueue(prev => [track, ...prev])
+  }
   function playNext() {
+
+    if (queue.length > 0) {
+      const nextTrack = queue[0];
+      setQueue(prev => prev.slice(1)); // Remove the track from the queue
+      handlePlayTrack(nextTrack);
+      return;
+    }
     if (!currentTrack || tracks.length === 0) return;
     const currentIndex = tracks.findIndex(t => t.path === currentTrack.path);
     if (currentIndex < tracks.length - 1) handlePlayTrack(tracks[currentIndex + 1]);
@@ -278,12 +304,14 @@ export default function App() {
           <Library
             tracks={tracks}
             handlePlayTrack={handlePlayTrack}
+            handleContextMenu={handleContextMenu}
           />
         ) : (
           <>
             <MainContent
               tracks={tracks} currentTrack={currentTrack} currentAlbumArt={albumArt}
               handlePlayTrack={handlePlayTrack}
+              handleContextMenu={handleContextMenu}
             />
             <TopArtistsPanel
               tracks={tracks} handlePlayTrack={handlePlayTrack}
@@ -301,6 +329,16 @@ export default function App() {
         handleVolumeChange={handleVolumeChange}
         toggleMute={toggleMute}
       />
+
+      {menuState.visible && menuState.track && (
+        <ContextMenu
+          x={menuState.x} y={menuState.y} track={menuState.track}
+          closeMenu={() => setMenuState({ ...menuState, visible: false })}
+          handlePlayTrack={handlePlayTrack}
+          insertNext={insertNext}
+          addToQueue={addToQueue}
+        />
+      )}
     </div>
   );
 }

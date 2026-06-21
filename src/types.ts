@@ -9,7 +9,7 @@ export interface Track {
 }
 
 export const lightColors = {
-    background: "#e2e6efff",
+    background: "#eae2f2ff",
     surface: "rgba(241, 245, 249, 0.65)",
     surfaceSolid: "#f1f5f9",
     primary: "#795cfaff",
