@@ -25,7 +25,6 @@ export default function App() {
     visible: false, x: 0, y: 0, track: null
   });
 
-  const [queue, setQueue] = useState<Track[]>([]);
 
   const handleContextMenu = (e: React.MouseEvent, track: Track) => {
     e.preventDefault(); // Prevents the default browser right-click menu
@@ -63,6 +62,8 @@ export default function App() {
   const [prevVolume, setPrevVolume] = useState(20);
 
   // --- QUEUE LOGIC ---
+  const [queue, setQueue] = useState<Track[]>([]);
+
 
   function addToQueue(track: Track) {
     setQueue(prev => [...prev, track]);
