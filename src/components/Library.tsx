@@ -31,6 +31,13 @@ export default function Library({ tracks, handlePlayTrack, handleContextMenu }: 
         if (tracks.length > 0) fetchAllArt();
     }, [tracks]);
 
+    const formatDuration = (seconds: number) => {
+        if (!seconds) return "0:00";
+        const m = Math.floor(seconds / 60);
+        const s = Math.floor(seconds % 60);
+        return `${m}:${s < 10 ? "0" : ""}${s}`;
+    };
+
     const sortedTracks = [...tracks];
     if (sortMode === "a-z") {
         sortedTracks.sort((a, b) => a.title.localeCompare(b.title));
@@ -50,7 +57,6 @@ export default function Library({ tracks, handlePlayTrack, handleContextMenu }: 
             padding: "2rem", overflowY: "auto"
         }}>
 
-            {/* --- HEADER & CONTROLS --- */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "2rem" }}>
                 <h2 style={{ fontSize: "1.8rem", fontWeight: "bold", margin: 0, color: theme.textDark }}>
                     All Tracks
@@ -58,7 +64,6 @@ export default function Library({ tracks, handlePlayTrack, handleContextMenu }: 
 
                 <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
 
-                    {/* Sort Dropdown */}
                     <select
                         value={sortMode}
                         onChange={(e) => setSortMode(e.target.value as any)}
@@ -73,7 +78,6 @@ export default function Library({ tracks, handlePlayTrack, handleContextMenu }: 
                         <option value="z-a">Title (Z-A)</option>
                     </select>
 
-                    {/* View Mode Toggles */}
                     <div style={{ display: "flex", backgroundColor: theme.surfaceSolid, borderRadius: "10px", padding: "4px" }}>
                         <button
                             onClick={() => setViewMode("grid")}
@@ -84,6 +88,7 @@ export default function Library({ tracks, handlePlayTrack, handleContextMenu }: 
                                 borderRadius: "8px", cursor: "pointer", display: "flex", transition: "all 0.2s"
                             }}
                         >
+                            {/* Grid Icon */}
                             <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
                         </button>
                         <button
@@ -95,14 +100,21 @@ export default function Library({ tracks, handlePlayTrack, handleContextMenu }: 
                                 borderRadius: "8px", cursor: "pointer", display: "flex", transition: "all 0.2s"
                             }}
                         >
-                            <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                            {/* FIXED: List Icon now uses strokes instead of fills! */}
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+                                <line x1="8" y1="6" x2="21" y2="6"></line>
+                                <line x1="8" y1="12" x2="21" y2="12"></line>
+                                <line x1="8" y1="18" x2="21" y2="18"></line>
+                                <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                                <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                                <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                            </svg>
                         </button>
                     </div>
 
                 </div>
             </div>
 
-            {/* --- CONDITIONAL RENDERING --- */}
             {viewMode === "grid" ? (
                 /* GRID VIEW */
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: "1.5rem", paddingBottom: "2rem" }}>
@@ -152,6 +164,11 @@ export default function Library({ tracks, handlePlayTrack, handleContextMenu }: 
                             <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
                                 <strong style={{ fontSize: "0.9rem", color: theme.textDark, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{track.title}</strong>
                                 <span style={{ fontSize: "0.8rem", color: theme.textMuted, marginTop: "2px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{track.artist}</span>
+                            </div>
+
+                            {/* NEW: Display the runtime on the far right */}
+                            <div style={{ marginLeft: "auto", paddingLeft: "15px", color: theme.textMuted, fontSize: "0.85rem", fontVariantNumeric: "tabular-nums" }}>
+                                {formatDuration(track.duration)}
                             </div>
                         </div>
                     ))}

@@ -62,6 +62,7 @@ export default function App() {
   const [prevVolume, setPrevVolume] = useState(20);
 
   // --- QUEUE LOGIC ---
+
   const [queue, setQueue] = useState<Track[]>([]);
 
 
@@ -271,7 +272,6 @@ export default function App() {
       transition: "background-color 0.3s ease, color 0.3s ease" // Smooth fade when switching themes
     }}>
 
-      {/* --- INJECT THE CSS VARIABLES HERE --- */}
       <style>{`
         :root {
           --bg: ${activeColors.background};
@@ -284,9 +284,17 @@ export default function App() {
         }
         body { margin: 0; padding: 0; overflow: hidden; }
         * { box-sizing: border-box; }
-        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar { width: 8px; height: 8px}
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(157, 136, 255, 0.3); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb { 
+          background-color: transparent; border-radius: 10px; transition: background-color 0.3s ease;
+        }
+          *:hover::-webkit-scrollbar-thumb {
+            background-color: rgba(167, 139, 250, 0.6)  
+          }
+          *:hover::-webkit-scrollbar-thumb {
+            background-color: rgba(167, 139, 250, 0.6)
+          }
       `}</style>
 
       {/* TOP LAYER: 3-Column Layout */}
