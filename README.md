@@ -1,4 +1,4 @@
-# Aura (Vibe Engine)
+# Aura
 
 Aura is an ultra-fast, modern, desktop music player engineered with **Tauri v2**, **Rust**, **React 19**, and **TypeScript**. Designed with sleek matte glassmorphism, dynamic theming (including pure AMOLED black), a non-blocking studio audio engine, and a tiny footprint (~4.8 MB standalone executable / ~1.6 MB installer).
 
