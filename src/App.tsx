@@ -2,7 +2,16 @@ import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { register, unregisterAll } from "@tauri-apps/plugin-global-shortcut";
 
-import { Track, theme, lightColors, darkColors } from "./types";
+import {
+  Track,
+  BaseTheme,
+  AccentColor,
+  ACCENT_COLORS,
+  themePalettes,
+  UserProfile
+} from "./types";
+import { getAlbumArtCached } from "./utils";
+import TitleBar from "./components/TitleBar";
 import Sidebar from "./components/Sidebar";
 import Library from "./components/Library";
 import MainContent from "./components/MainContent";
@@ -10,27 +19,59 @@ import PlayerDock from "./components/PlayerDock";
 import Settings from "./components/Settings";
 import TopArtistsPanel from "./components/TopArtistsPanel";
 import ContextMenu from "./components/ContextMenu";
+import GenresView from "./components/GenresView";
+import ArtistsView from "./components/ArtistsView";
+import AlbumsView from "./components/AlbumsView";
+import AnalyticsView from "./components/AnalyticsView";
+import ProfileModal from "./components/ProfileModal";
 
 export default function App() {
-
   const [activeTab, setActiveTab] = useState(() => {
     return localStorage.getItem("vibe_active_tab") || "home";
   });
 
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    return localStorage.getItem("vibe_dark_mode") === "true";
+  // Base Theme: dark | amoled | light
+  const [baseTheme, setBaseTheme] = useState<BaseTheme>(() => {
+    const saved = localStorage.getItem("aura_base_theme") as BaseTheme;
+    if (saved === "dark" || saved === "amoled" || saved === "light") return saved;
+    const oldDark = localStorage.getItem("vibe_dark_mode");
+    return oldDark === "false" ? "light" : "dark";
   });
 
-  const [menuState, setMenuState] = useState<{ visible: boolean, x: number, y: number, track: Track | null }>({
-    visible: false, x: 0, y: 0, track: null
+  // Accent Color (Only accent changes!)
+  const [accentColor, setAccentColor] = useState<AccentColor>(() => {
+    const savedId = localStorage.getItem("aura_accent_color") || "cyan";
+    return ACCENT_COLORS.find(c => c.id === savedId) || ACCENT_COLORS[0];
   });
 
+  // Fade Duration (ms)
+  const [fadeDuration, setFadeDuration] = useState<number>(() => {
+    const saved = localStorage.getItem("aura_fade_duration");
+    return saved ? parseInt(saved) : 280;
+  });
 
-  const handleContextMenu = (e: React.MouseEvent, track: Track) => {
-    e.preventDefault(); // Prevents the default browser right-click menu
-    setMenuState({ visible: true, x: e.clientX, y: e.clientY, track });
-  };
-  useEffect(() => { localStorage.setItem("vibe_dark_mode", String(isDarkMode)); }, [isDarkMode]);
+  // User Profile
+  const [profile, setProfile] = useState<UserProfile>(() => {
+    const saved = localStorage.getItem("aura_user_profile");
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return {
+      name: "Alex",
+      bio: "Audiophile & Music Explorer",
+      avatarColor: "#00e5cc",
+      joinedDate: "November 2026"
+    };
+  });
+  const [showProfileModal, setShowProfileModal] = useState(false);
+
+  const [favorites, setFavorites] = useState<string[]>(() => {
+    const saved = localStorage.getItem("vibe_favorites");
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { return []; }
+    }
+    return [];
+  });
 
   const [tracks, setTracks] = useState<Track[]>(() => {
     const saved = localStorage.getItem("vibe_library");
@@ -44,69 +85,329 @@ export default function App() {
     return localStorage.getItem("vibe_scan_path") || "C:\\Users\\Public\\Music";
   });
 
-  // Silently save to localStorage whenever these variables change
-  useEffect(() => { localStorage.setItem("vibe_active_tab", activeTab); }, [activeTab]);
-  useEffect(() => { localStorage.setItem("vibe_library", JSON.stringify(tracks)); }, [tracks]);
-  useEffect(() => { localStorage.setItem("vibe_scan_path", scanPath); }, [scanPath]);
-  // ---------------------------------
-
-
-  const [isScanning, setIsScanning] = useState(false);
-  const [albumArt, setAlbumArt] = useState<string | null>(null);
-
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
+  const [albumArt, setAlbumArt] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
-
-  const [volume, setVolume] = useState(20);
-  const [prevVolume, setPrevVolume] = useState(20);
-
-  // --- QUEUE LOGIC ---
-
+  const [volume, setVolume] = useState(25);
+  const [prevVolume, setPrevVolume] = useState(25);
+  const [shuffle, setShuffle] = useState(false);
+  const [repeat, setRepeat] = useState<"off" | "one" | "all">("off");
   const [queue, setQueue] = useState<Track[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isScanning, setIsScanning] = useState(false);
+  const [notification, setNotification] = useState<string | null>(null);
 
+  // Sleep timer state (remaining seconds)
+  const [sleepTimerRemaining, setSleepTimerRemaining] = useState<number | null>(null);
 
-  function addToQueue(track: Track) {
-    setQueue(prev => [...prev, track]);
+  const [menuState, setMenuState] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    track: Track | null;
+  }>({ visible: false, x: 0, y: 0, track: null });
+
+  // Persistence
+  useEffect(() => { localStorage.setItem("vibe_active_tab", activeTab); }, [activeTab]);
+  useEffect(() => { localStorage.setItem("aura_base_theme", baseTheme); }, [baseTheme]);
+  useEffect(() => { localStorage.setItem("aura_accent_color", accentColor.id); }, [accentColor.id]);
+  useEffect(() => { localStorage.setItem("aura_fade_duration", String(fadeDuration)); }, [fadeDuration]);
+  useEffect(() => { localStorage.setItem("aura_user_profile", JSON.stringify(profile)); }, [profile]);
+  useEffect(() => { localStorage.setItem("vibe_favorites", JSON.stringify(favorites)); }, [favorites]);
+  useEffect(() => { localStorage.setItem("vibe_library", JSON.stringify(tracks)); }, [tracks]);
+  useEffect(() => { localStorage.setItem("vibe_scan_path", scanPath); }, [scanPath]);
+
+  function notify(msg: string) {
+    setNotification(msg);
+    window.setTimeout(() => setNotification(curr => curr === msg ? null : curr), 4000);
   }
 
-  function insertNext(track: Track) {
-    setQueue(prev => [track, ...prev])
+  function toggleFavorite(path: string) {
+    setFavorites(prev => {
+      const isFav = prev.includes(path);
+      const updated = isFav ? prev.filter(p => p !== path) : [...prev, path];
+      notify(isFav ? "Removed from Liked Songs" : "Added to Liked Songs ♥");
+      return updated;
+    });
   }
-  function playNext() {
 
-    if (queue.length > 0) {
-      const nextTrack = queue[0];
-      setQueue(prev => prev.slice(1)); // Remove the track from the queue
-      handlePlayTrack(nextTrack);
+  // --- AUDIO FADE IN / FADE OUT HELPER ---
+  const isFadingRef = useRef(false);
+  async function fadeAudio(fromVol: number, toVol: number, durationMs: number = 280) {
+    if (durationMs <= 0) {
+      try {
+        await invoke("set_volume", { volume: Math.max(0, Math.min(1, toVol / 100)) });
+      } catch (e) {}
       return;
     }
-    if (!currentTrack || tracks.length === 0) return;
-    const currentIndex = tracks.findIndex(t => t.path === currentTrack.path);
-    if (currentIndex < tracks.length - 1) handlePlayTrack(tracks[currentIndex + 1]);
+    if (isFadingRef.current) return;
+    isFadingRef.current = true;
+    const steps = 5;
+    const stepTime = durationMs / steps;
+    const delta = toVol - fromVol;
+    for (let i = 1; i <= steps; i++) {
+      const val = fromVol + (delta * (i / steps));
+      try {
+        await invoke("set_volume", { volume: Math.max(0, Math.min(1, val / 100)) });
+      } catch (e) {}
+      await new Promise(res => setTimeout(res, stepTime));
+    }
+    isFadingRef.current = false;
   }
 
-  function playPrev() {
-    if (!currentTrack || tracks.length === 0) return;
-    const currentIndex = tracks.findIndex(t => t.path === currentTrack.path);
-    if (currentIndex > 0) handlePlayTrack(tracks[currentIndex - 1]);
+  // Refs for audio engine
+  const tracksRef = useRef(tracks);
+  tracksRef.current = tracks;
+  const currentTrackRef = useRef(currentTrack);
+  currentTrackRef.current = currentTrack;
+  const queueRef = useRef(queue);
+  queueRef.current = queue;
+  const shuffleRef = useRef(shuffle);
+  shuffleRef.current = shuffle;
+  const repeatRef = useRef(repeat);
+  repeatRef.current = repeat;
+  const volumeRef = useRef(volume);
+  volumeRef.current = volume;
+  const isPlayingRef = useRef(isPlaying);
+  isPlayingRef.current = isPlaying;
+  const fadeDurationRef = useRef(fadeDuration);
+  fadeDurationRef.current = fadeDuration;
+
+  // --- CORE AUDIO PLAY WITH FADE ---
+  async function handlePlayTrack(track: Track) {
+    try {
+      const targetVol = volumeRef.current;
+      const fDuration = fadeDurationRef.current;
+
+      if (isPlayingRef.current && fDuration > 0) {
+        await fadeAudio(targetVol, 0, Math.round(fDuration * 0.75));
+      }
+
+      await invoke("play_audio", { path: track.path });
+      setCurrentTrack(track);
+      setIsPlaying(true);
+      setProgress(0);
+
+      setAlbumArt(null);
+      void getAlbumArtCached(track.path).then(art => {
+        if (currentTrackRef.current?.path === track.path) {
+          setAlbumArt(art);
+        }
+      });
+
+      if (fDuration > 0) {
+        void fadeAudio(0, targetVol, fDuration);
+      } else {
+        try { await invoke("set_volume", { volume: targetVol / 100 }); } catch (e) {}
+      }
+
+      setTracks(prev => prev.map(t => t.path === track.path
+        ? { ...t, playCount: (t.playCount || 0) + 1, lastPlayed: Date.now() }
+        : t));
+    } catch (error) {
+      setIsPlaying(false);
+      notify(`Playback error: ${String(error)}`);
+    }
   }
 
   async function togglePause() {
+    if (!currentTrack) {
+      if (tracks.length > 0) {
+        const first = tracks.find(t => t.lastPlayed) || tracks[0];
+        await handlePlayTrack(first);
+      } else {
+        notify("No tracks found. Sync your music folder in Settings.");
+      }
+      return;
+    }
+
+    const currentVol = volumeRef.current;
+    const fDuration = fadeDurationRef.current;
+
     if (isPlaying) {
-      await invoke("pause_audio");
-      setIsPlaying(false);
+      if (fDuration > 0) {
+        await fadeAudio(currentVol, 0, Math.round(fDuration * 0.75));
+      }
+      try {
+        await invoke("pause_audio");
+        setIsPlaying(false);
+      } catch (err) {
+        notify(`Pause failed: ${String(err)}`);
+      }
     } else {
-      await invoke("resume_audio");
-      setIsPlaying(true);
+      try {
+        if (fDuration > 0) {
+          await invoke("set_volume", { volume: 0 });
+          await invoke("resume_audio");
+          setIsPlaying(true);
+          void fadeAudio(0, currentVol, fDuration);
+        } else {
+          await invoke("set_volume", { volume: currentVol / 100 });
+          await invoke("resume_audio");
+          setIsPlaying(true);
+        }
+      } catch (err) {
+        notify(`Resume failed: ${String(err)}`);
+      }
     }
   }
 
-  // --- GLOBAL & LOCAL SHORTCUTS ---
-  const engineRef = useRef({ togglePause, playNext, playPrev });
+  function playNext() {
+    const allTracks = tracksRef.current;
+    if (allTracks.length === 0) return;
+
+    const curr = currentTrackRef.current;
+    if (!curr) {
+      void handlePlayTrack(allTracks[0]);
+      return;
+    }
+
+    if (repeatRef.current === "one") {
+      void handlePlayTrack(curr);
+      return;
+    }
+
+    if (queueRef.current.length > 0) {
+      const nextTrack = queueRef.current[0];
+      setQueue(prev => prev.slice(1));
+      void handlePlayTrack(nextTrack);
+      return;
+    }
+
+    if (shuffleRef.current) {
+      const candidates = allTracks.filter(t => t.path !== curr.path);
+      if (candidates.length > 0) {
+        void handlePlayTrack(candidates[Math.floor(Math.random() * candidates.length)]);
+      } else {
+        void handlePlayTrack(allTracks[0]);
+      }
+      return;
+    }
+
+    const currentIndex = allTracks.findIndex(t => t.path === curr.path);
+    if (currentIndex >= 0 && currentIndex < allTracks.length - 1) {
+      void handlePlayTrack(allTracks[currentIndex + 1]);
+    } else {
+      void handlePlayTrack(allTracks[0]);
+    }
+  }
+
+  function playPrev() {
+    const allTracks = tracksRef.current;
+    if (allTracks.length === 0) return;
+
+    const curr = currentTrackRef.current;
+    if (!curr) {
+      void handlePlayTrack(allTracks[0]);
+      return;
+    }
+
+    if (progress > 3) {
+      void invoke("seek_to", { position: 0 });
+      setProgress(0);
+      return;
+    }
+
+    const currentIndex = allTracks.findIndex(t => t.path === curr.path);
+    if (currentIndex > 0) {
+      void handlePlayTrack(allTracks[currentIndex - 1]);
+    } else {
+      void handlePlayTrack(allTracks[allTracks.length - 1]);
+    }
+  }
+
+  async function handleSeek(targetTime: number) {
+    if (!currentTrack) return;
+    setProgress(targetTime);
+    try {
+      await invoke("seek_to", { position: targetTime });
+    } catch (err) {
+      notify(`Seek failed: ${String(err)}`);
+    }
+  }
+
+  async function handleVolumeChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const newVol = parseInt(e.target.value);
+    setVolume(newVol);
+    if (newVol > 0) setPrevVolume(newVol);
+    try {
+      await invoke("set_volume", { volume: newVol / 100 });
+    } catch (err) {
+      notify(`Volume error: ${String(err)}`);
+    }
+  }
+
+  async function toggleMute() {
+    if (volume > 0) {
+      setPrevVolume(volume);
+      setVolume(0);
+      try { await invoke("set_volume", { volume: 0 }); } catch (e) {}
+    } else {
+      const restored = prevVolume === 0 ? 25 : prevVolume;
+      setVolume(restored);
+      try { await invoke("set_volume", { volume: restored / 100 }); } catch (e) {}
+    }
+  }
+
+  // --- SLEEP TIMER ---
+  const setSleepTimer = (minutes: number | null) => {
+    if (minutes === null) {
+      setSleepTimerRemaining(null);
+      notify("Sleep timer turned off.");
+    } else {
+      setSleepTimerRemaining(minutes * 60);
+      notify(`Sleep timer set: ${minutes} minutes 🌙`);
+    }
+  };
+
   useEffect(() => {
-    engineRef.current = { togglePause, playNext, playPrev };
-  }, [togglePause, playNext, playPrev]);
+    if (sleepTimerRemaining === null) return;
+    const interval = setInterval(async () => {
+      setSleepTimerRemaining(prev => {
+        if (prev === null) return null;
+        if (prev <= 1) {
+          void (async () => {
+            await fadeAudio(volumeRef.current, 0, 1800);
+            try { await invoke("pause_audio"); } catch (e) {}
+            setIsPlaying(false);
+            notify("Sleep timer finished. Sweet dreams! 🌙");
+          })();
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [sleepTimerRemaining]);
+
+  async function handleScan() {
+    if (!scanPath.trim()) {
+      notify("Select a valid music folder first.");
+      return;
+    }
+    setIsScanning(true);
+    try {
+      const newTracks = await invoke<Track[]>("scan_directory", { path: scanPath });
+      setTracks(prevTracks => {
+        const prevMap = new Map(prevTracks.map(t => [t.path.toLowerCase(), t]));
+        return newTracks.map(t => ({
+          ...t,
+          ...(prevMap.get(t.path.toLowerCase()) ?? {})
+        }));
+      });
+      notify(`Scanned ${newTracks.length} track${newTracks.length === 1 ? "" : "s"}.`);
+    } catch (error) {
+      notify(`Library scan error: ${String(error)}`);
+    } finally {
+      setIsScanning(false);
+    }
+  }
+
+  // Global & Local Shortcuts + Fullscreen F11
+  const engineRef = useRef({ togglePause, playNext, playPrev });
+  engineRef.current = { togglePause, playNext, playPrev };
 
   useEffect(() => {
     async function setupShortcuts() {
@@ -115,20 +416,28 @@ export default function App() {
         await register("MediaPlayPause", () => engineRef.current.togglePause());
         await register("MediaNextTrack", () => engineRef.current.playNext());
         await register("MediaPreviousTrack", () => engineRef.current.playPrev());
-      } catch (error) {
-        await register("Alt+Shift+Space", () => engineRef.current.togglePause());
-        await register("Alt+Shift+Right", () => engineRef.current.playNext());
-        await register("Alt+Shift+Left", () => engineRef.current.playPrev());
+      } catch (e) {
+        try {
+          await register("Alt+Shift+Space", () => engineRef.current.togglePause());
+          await register("Alt+Shift+Right", () => engineRef.current.playNext());
+          await register("Alt+Shift+Left", () => engineRef.current.playPrev());
+        } catch (err) {}
       }
     }
     setupShortcuts();
-    return () => { unregisterAll().catch(console.error); };
+    return () => { unregisterAll().catch(() => {}); };
   }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "F11") {
+        e.preventDefault();
+        void invoke("toggle_fullscreen");
+        return;
+      }
       if (e.code === "Space") {
-        if (document.activeElement?.tagName !== "INPUT" && document.activeElement?.tagName !== "TEXTAREA") {
+        const tag = document.activeElement?.tagName;
+        if (tag !== "INPUT" && tag !== "TEXTAREA") {
           e.preventDefault();
           engineRef.current.togglePause();
         }
@@ -138,10 +447,8 @@ export default function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // --- AUDIO PIPELINE RECOVERY ---
-  const lastPosRef = useRef(0);
-  const stuckCountRef = useRef(0);
-
+  // Playback timer loop
+  const endedTrackRef = useRef<string | null>(null);
   useEffect(() => {
     let interval: number;
     if (isPlaying && currentTrack) {
@@ -150,203 +457,264 @@ export default function App() {
           const pos = await invoke<number>("get_playback_position");
           setProgress(pos);
 
-          if (pos > 0 && pos === lastPosRef.current) {
-            stuckCountRef.current += 1;
-            if (stuckCountRef.current >= 4) {
-              console.log("Audio pipeline frozen. Forcing Rust reboot...");
-              stuckCountRef.current = 0;
-              await invoke("refresh_audio_device");
-              await invoke("play_audio", { path: currentTrack.path });
-              await invoke("seek_to", { position: pos });
-            }
-          } else {
-            stuckCountRef.current = 0;
-          }
-          lastPosRef.current = pos;
-
-          if (currentTrack.duration > 0 && pos >= currentTrack.duration - 0.2) {
+          if (currentTrack.duration > 0 && pos >= currentTrack.duration - 0.4 && endedTrackRef.current !== currentTrack.path) {
+            endedTrackRef.current = currentTrack.path;
             playNext();
           }
-        } catch (e) {
-          console.error("Failed to fetch position", e);
-        }
+        } catch (err) {}
       }, 250);
     }
     return () => clearInterval(interval);
-  }, [isPlaying, currentTrack, tracks]);
+  }, [isPlaying, currentTrack?.path]);
 
-  // --- CORE AUDIO ACTION ---
-  async function handleScan() {
-    setIsScanning(true);
-    try {
-      // 1. Get the new tracks from the scanned folder
-      const newTracks = await invoke<Track[]>("scan_directory", { path: scanPath });
+  const activeBase = themePalettes[baseTheme];
+  const isCurrentFavorite = currentTrack ? favorites.includes(currentTrack.path) : false;
 
-      // 2. Smart Merge into existing library
-      setTracks(prevTracks => {
-        const trackMap = new Map();
+  const handleContextMenu = (e: React.MouseEvent, track: Track) => {
+    e.preventDefault();
+    setMenuState({ visible: true, x: e.clientX, y: e.clientY, track });
+  };
 
-        // Step A: Load all your existing tracks into a Map first. 
-        // This preserves your 'playCount' and 'lastPlayed' data!
-        prevTracks.forEach(t => trackMap.set(t.path, t));
-
-        // Step B: Add the newly scanned tracks.
-        // It will only add them if the file path doesn't already exist in the Map.
-        newTracks.forEach(t => {
-          if (!trackMap.has(t.path)) {
-            trackMap.set(t.path, t);
-          }
-        });
-
-        // Step C: Convert the Map back into a standard array for React
-        return Array.from(trackMap.values());
-      });
-
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setIsScanning(false);
-    }
-  }
-  async function handlePlayTrack(track: Track) {
-    setCurrentTrack(track);
-    setIsPlaying(true);
-    setAlbumArt(null);
-    setProgress(0);
-
-    // --- TRACKING METRICS UPDATE ---
-    setTracks(prevTracks =>
-      prevTracks.map(t => {
-        if (t.path === track.path) {
-          return {
-            ...t,
-            playCount: (t.playCount || 0) + 1,
-            lastPlayed: Date.now()
-          };
-        }
-        return t;
-      })
-    );
-    await invoke("play_audio", { path: track.path });
-
-    try {
-      const art = await invoke<string | null>("get_album_art", { path: track.path });
-      if (art) setAlbumArt(art);
-    } catch (e) { }
-  }
-
-  async function toggleMute() {
-    if (volume > 0) {
-      setPrevVolume(volume);
-      setVolume(0);
-      await invoke("set_volume", { volume: 0 });
-    } else {
-      const restoreVol = prevVolume === 0 ? 20 : prevVolume;
-      setVolume(restoreVol);
-      await invoke("set_volume", { volume: restoreVol / 100 });
-    }
-  }
-
-  async function handleVolumeChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const newVol = parseInt(e.target.value);
-    setVolume(newVol);
-    if (newVol > 0) setPrevVolume(newVol);
-    await invoke("set_volume", { volume: newVol / 100 });
-  }
-
-  async function handleSeek(e: React.MouseEvent<HTMLDivElement>) {
+  const handleShowInExplorer = async () => {
     if (!currentTrack) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const percent = (e.clientX - rect.left) / rect.width;
-    const targetTime = percent * currentTrack.duration;
-    setProgress(targetTime);
-    await invoke("seek_to", { position: targetTime });
-  }
-
-  const activeColors = isDarkMode ? darkColors : lightColors;
+    try {
+      await invoke("show_in_explorer", { path: currentTrack.path });
+    } catch (e) {}
+  };
 
   return (
     <div style={{
-      display: "flex", flexDirection: "column", height: "100vh", width: "100vw", overflow: "hidden",
-      backgroundColor: theme.background, color: theme.textDark, fontFamily: "'Inter', sans-serif",
-      transition: "background-color 0.3s ease, color 0.3s ease" // Smooth fade when switching themes
+      display: "flex",
+      flexDirection: "column",
+      height: "100vh",
+      width: "100vw",
+      overflow: "hidden",
+      backgroundColor: "var(--bg)",
+      color: "var(--text-dark)",
+      fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
     }}>
-
+      {/* Dynamic CSS variables: Base Palette + ONLY Accent Color changes! */}
       <style>{`
         :root {
-          --bg: ${activeColors.background};
-          --surface: ${activeColors.surface};
-          --surface-solid: ${activeColors.surfaceSolid};
-          --primary: ${activeColors.primary};
-          --text-dark: ${activeColors.textDark};
-          --text-muted: ${activeColors.textMuted};
-          --border: ${activeColors.border};
+          --bg: ${activeBase.background};
+          --surface: ${activeBase.surface};
+          --surface-solid: ${activeBase.surfaceSolid};
+          --surface-hover: ${activeBase.surfaceHover};
+          --card-bg: ${activeBase.cardBg};
+          --sidebar: ${activeBase.sidebar};
+          --primary: ${accentColor.primary};
+          --primary-hover: ${accentColor.hover};
+          --primary-soft: ${accentColor.soft};
+          --text-dark: ${activeBase.textDark};
+          --text-muted: ${activeBase.textMuted};
+          --border: ${activeBase.border};
+          --slider-track: ${activeBase.sliderTrack};
+          --scrollbar: ${activeBase.scrollbar};
+          --scrollbar-hover: ${activeBase.scrollbarHover};
+          --now-playing-bg: ${activeBase.nowPlayingBg};
+          --heroGradient: ${activeBase.heroGradient};
         }
-        body { margin: 0; padding: 0; overflow: hidden; }
-        * { box-sizing: border-box; }
-        ::-webkit-scrollbar { width: 8px; height: 8px}
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { 
-          background-color: transparent; border-radius: 10px; transition: background-color 0.3s ease;
-        }
-          *:hover::-webkit-scrollbar-thumb {
-            background-color: rgba(167, 139, 250, 0.6)  
-          }
-          *:hover::-webkit-scrollbar-thumb {
-            background-color: rgba(167, 139, 250, 0.6)
-          }
       `}</style>
 
-      {/* TOP LAYER: 3-Column Layout */}
-      <div style={{ display: "flex", flex: 1, overflow: "hidden", padding: "1rem", gap: "1rem" }}>
+      {/* 0. CUSTOM TITLEBAR (Hides ugly default OS titlebar, provides drag & window controls) */}
+      <TitleBar />
 
-        <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+      {/* TOP REGION: SIDEBAR + MAIN VIEWS */}
+      <div style={{
+        display: "flex",
+        flex: 1,
+        overflow: "hidden"
+      }}>
+        {/* 1. SIDEBAR MENU */}
+        <Sidebar
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          sleepTimerRemaining={sleepTimerRemaining}
+          onOpenSleepTimer={() => setSleepTimer(sleepTimerRemaining ? null : 30)}
+          profile={profile}
+          onOpenProfile={() => setShowProfileModal(true)}
+        />
 
-        {activeTab === "settings" ? (
-          <Settings
-            scanPath={scanPath} setScanPath={setScanPath}
-            isScanning={isScanning} handleScan={handleScan}
-            // Add the new props here:
-            isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode}
-          />
-        ) : activeTab === "library" ? (
-          <Library
-            tracks={tracks}
-            handlePlayTrack={handlePlayTrack}
-            handleContextMenu={handleContextMenu}
-          />
-        ) : (
-          <>
-            <MainContent
-              tracks={tracks} currentTrack={currentTrack} currentAlbumArt={albumArt}
+        {/* 2. MAIN CENTER & RIGHT VIEWS */}
+        <div style={{
+          flex: 1,
+          display: "flex",
+          overflow: "hidden",
+          padding: "16px 22px",
+          gap: "20px"
+        }}>
+          {activeTab === "settings" ? (
+            <Settings
+              scanPath={scanPath}
+              setScanPath={setScanPath}
+              isScanning={isScanning}
+              handleScan={handleScan}
+              baseTheme={baseTheme}
+              setBaseTheme={setBaseTheme}
+              accentColor={accentColor}
+              setAccentColor={setAccentColor}
+              fadeDuration={fadeDuration}
+              setFadeDuration={setFadeDuration}
+              tracks={tracks}
+              notify={notify}
+            />
+          ) : activeTab === "analytics" ? (
+            <AnalyticsView
+              tracks={tracks}
               handlePlayTrack={handlePlayTrack}
+            />
+          ) : activeTab === "genres" ? (
+            <GenresView
+              tracks={tracks}
+              currentTrack={currentTrack}
+              isPlaying={isPlaying}
+              handlePlayTrack={handlePlayTrack}
+              togglePause={togglePause}
+              toggleFavorite={toggleFavorite}
+              favorites={favorites}
+            />
+          ) : activeTab === "artists" ? (
+            <ArtistsView
+              tracks={tracks}
+              handlePlayTrack={handlePlayTrack}
+            />
+          ) : activeTab === "albums" ? (
+            <AlbumsView
+              tracks={tracks}
+              handlePlayTrack={handlePlayTrack}
+            />
+          ) : activeTab === "library" ? (
+            <Library
+              tracks={tracks}
+              currentTrack={currentTrack}
+              isPlaying={isPlaying}
+              handlePlayTrack={handlePlayTrack}
+              togglePause={togglePause}
               handleContextMenu={handleContextMenu}
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              favorites={favorites}
+              toggleFavorite={toggleFavorite}
+              filterOnlyFavorites={false}
             />
-            <TopArtistsPanel
-              tracks={tracks} handlePlayTrack={handlePlayTrack}
+          ) : activeTab === "favorites" ? (
+            <Library
+              tracks={tracks}
+              currentTrack={currentTrack}
+              isPlaying={isPlaying}
+              handlePlayTrack={handlePlayTrack}
+              togglePause={togglePause}
+              handleContextMenu={handleContextMenu}
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              favorites={favorites}
+              toggleFavorite={toggleFavorite}
+              filterOnlyFavorites={true}
             />
-          </>
-        )}
+          ) : (
+            <>
+              {/* EXPLORE (HOME) */}
+              <MainContent
+                tracks={tracks}
+                currentTrack={currentTrack}
+                currentAlbumArt={albumArt}
+                isPlaying={isPlaying}
+                handlePlayTrack={handlePlayTrack}
+                togglePause={togglePause}
+                handleContextMenu={handleContextMenu}
+                searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
+                favorites={favorites}
+                toggleFavorite={toggleFavorite}
+                onSyncLibrary={handleScan}
+                isScanning={isScanning}
+                onOpenSettings={() => setActiveTab("settings")}
+              />
+
+              {/* RIGHT PANEL: NOW PLAYING COVER ART & TRENDING ARTISTS */}
+              <TopArtistsPanel
+                tracks={tracks}
+                currentTrack={currentTrack}
+                currentAlbumArt={albumArt}
+                handlePlayTrack={handlePlayTrack}
+                queue={queue}
+                removeFromQueue={idx => setQueue(prev => prev.filter((_, i) => i !== idx))}
+              />
+            </>
+          )}
+        </div>
       </div>
 
+      {/* 3. PROPER BOTTOM PLAYER DOCK WITH FULL-WIDTH SEEKBAR & SLEEP TIMER */}
       <PlayerDock
-        currentTrack={currentTrack} albumArt={albumArt}
-        isPlaying={isPlaying} progress={progress}
-        togglePause={togglePause} playNext={playNext} playPrev={playPrev}
+        currentTrack={currentTrack}
+        albumArt={albumArt}
+        isPlaying={isPlaying}
+        progress={progress}
+        togglePause={togglePause}
+        playNext={playNext}
+        playPrev={playPrev}
         handleSeek={handleSeek}
         volume={volume}
         handleVolumeChange={handleVolumeChange}
         toggleMute={toggleMute}
+        shuffle={shuffle}
+        setShuffle={setShuffle}
+        repeat={repeat}
+        setRepeat={setRepeat}
+        isFavorite={isCurrentFavorite}
+        toggleFavorite={() => currentTrack && toggleFavorite(currentTrack.path)}
+        handleShowInExplorer={handleShowInExplorer}
+        sleepTimerRemaining={sleepTimerRemaining}
+        setSleepTimer={setSleepTimer}
       />
 
+      {/* USER PROFILE MODAL */}
+      {showProfileModal && (
+        <ProfileModal
+          profile={profile}
+          onSaveProfile={updated => {
+            setProfile(updated);
+            notify("Profile updated successfully!");
+          }}
+          onClose={() => setShowProfileModal(false)}
+          tracks={tracks}
+        />
+      )}
+
+      {/* CONTEXT MENU */}
       {menuState.visible && menuState.track && (
         <ContextMenu
-          x={menuState.x} y={menuState.y} track={menuState.track}
-          closeMenu={() => setMenuState({ ...menuState, visible: false })}
+          x={menuState.x}
+          y={menuState.y}
+          track={menuState.track}
+          closeMenu={() => setMenuState(prev => ({ ...prev, visible: false }))}
           handlePlayTrack={handlePlayTrack}
-          insertNext={insertNext}
-          addToQueue={addToQueue}
+          insertNext={track => setQueue(prev => [track, ...prev])}
+          addToQueue={track => setQueue(prev => [...prev, track])}
+          isFavorite={favorites.includes(menuState.track.path)}
+          toggleFavorite={toggleFavorite}
         />
+      )}
+
+      {/* TOAST NOTIFICATION */}
+      {notification && (
+        <div style={{
+          position: "fixed",
+          bottom: "105px",
+          right: "24px",
+          zIndex: 10000,
+          backgroundColor: "var(--surface-solid)",
+          color: "var(--text-dark)",
+          padding: "12px 18px",
+          borderRadius: "14px",
+          border: "1px solid var(--border)",
+          boxShadow: "0 8px 24px rgba(0,0,0,0.3)",
+          fontSize: "0.85rem",
+          fontWeight: "600"
+        }}>
+          {notification}
+        </div>
       )}
     </div>
   );

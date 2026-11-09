@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "npm",
+  "productName": "Aura",
   "version": "0.1.0",
-  "identifier": "com.jatin.npm",
+  "identifier": "com.aura.musicplayer",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -13,12 +13,13 @@
     "windows": [
       {
         "title": "Aura",
-        "width": 900,
-        "height": 600,
-        "minWidth": 600,
-        "minHeight": 400,
+        "width": 1200,
+        "height": 780,
+        "minWidth": 900,
+        "minHeight": 580,
         "resizable": true,
-        "fullscreen": false
+        "fullscreen": false,
+        "decorations": false
       }
     ],
     "security": {
