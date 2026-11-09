@@ -1,105 +1,666 @@
-import { useState, useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { useState, useEffect, useRef } from "react";
 import { Track, theme } from "../types";
+import { formatTime, getAlbumArtCached } from "../utils";
 
 interface MainContentProps {
     tracks: Track[];
     currentTrack: Track | null;
     currentAlbumArt: string | null;
+    isPlaying: boolean;
     handlePlayTrack: (track: Track) => void;
+    togglePause: () => void;
     handleContextMenu: (e: React.MouseEvent, track: Track) => void;
+    searchQuery: string;
+    setSearchQuery: (value: string) => void;
+    favorites: string[];
+    toggleFavorite: (path: string) => void;
+    onSyncLibrary: () => void;
+    isScanning: boolean;
+    onOpenSettings: () => void;
 }
 
-export default function MainContent({ tracks, currentTrack, currentAlbumArt, handlePlayTrack }: MainContentProps) {
-    const [artCache, setArtCache] = useState<Record<string, string>>({});
+export default function MainContent({
+    tracks,
+    currentTrack,
+    currentAlbumArt,
+    isPlaying,
+    handlePlayTrack,
+    togglePause,
+    handleContextMenu,
+    searchQuery,
+    setSearchQuery,
+    favorites,
+    toggleFavorite,
+    onSyncLibrary,
+    isScanning,
+    onOpenSettings
+}: MainContentProps) {
+    const [albumArtCache, setAlbumArtCache] = useState<Record<string, string>>({});
+    const carouselRef = useRef<HTMLDivElement>(null);
 
-    // --- SORTING LOGIC ---
-    const mostPlayed = [...tracks].sort((a, b) => (b.playCount || 0) - (a.playCount || 0)).slice(0, 5);
+    // Filter tracks based on search query
+    const filteredTracks = tracks.filter(track => {
+        return `${track.title} ${track.artist} ${track.album}`
+            .toLowerCase()
+            .includes(searchQuery.toLowerCase());
+    });
 
-    // FIX: Sliced down to exactly 5 tracks for a cleaner, unified grid
-    let recentlyPlayed = [...tracks].filter(t => t.lastPlayed).sort((a, b) => (b.lastPlayed || 0) - (a.lastPlayed || 0)).slice(0, 5);
+    // Derive featured track, albums, and popular tracks
+    const popularTracks = [...filteredTracks]
+        .sort((a, b) => (b.playCount || 0) - (a.playCount || 0))
+        .slice(0, 10);
 
-    // Fallback if app is new and nothing has been played yet
-    if (recentlyPlayed.length === 0) recentlyPlayed = tracks.slice(0, 5);
+    const albums = Array.from(new Set(filteredTracks.map(t => t.album || t.title)))
+        .map(albumName => filteredTracks.find(t => (t.album || t.title) === albumName)!)
+        .filter(Boolean)
+        .slice(0, 8);
 
+    const heroTrack = currentTrack || popularTracks[0] || filteredTracks[0] || null;
+    const isHeroFavorite = heroTrack ? favorites.includes(heroTrack.path) : false;
+
+    // Load artwork only for hero, top albums, and top popular tracks
     useEffect(() => {
-        async function fetchVisibleArt() {
-            const newArt: Record<string, string> = {};
-            const tracksToFetch = [...mostPlayed, ...recentlyPlayed];
+        let isMounted = true;
+        async function loadVisibleArt() {
+            const tracksToLoad = [
+                ...(heroTrack ? [heroTrack] : []),
+                ...albums,
+                ...popularTracks.slice(0, 8)
+            ];
 
-            for (const track of tracksToFetch) {
-                if (!artCache[track.path]) {
-                    try {
-                        const art = await invoke<string | null>("get_album_art", { path: track.path });
-                        if (art) newArt[track.path] = art;
-                    } catch (e) { }
+            const newArt: Record<string, string> = {};
+            for (const track of tracksToLoad) {
+                if (!albumArtCache[track.path]) {
+                    const art = await getAlbumArtCached(track.path);
+                    if (art) newArt[track.path] = art;
                 }
             }
-            if (Object.keys(newArt).length > 0) setArtCache(prev => ({ ...prev, ...newArt }));
-        }
-        if (tracks.length > 0) fetchVisibleArt();
-    }, [tracks, mostPlayed, recentlyPlayed]);
 
-    const displayTrack = currentTrack || (mostPlayed.length > 0 ? mostPlayed[0] : null);
-    const displayArt = currentTrack ? currentAlbumArt : (displayTrack ? artCache[displayTrack.path] : null);
+            if (isMounted && Object.keys(newArt).length > 0) {
+                setAlbumArtCache(prev => ({ ...prev, ...newArt }));
+            }
+        }
+
+        if (tracks.length > 0) {
+            void loadVisibleArt();
+        }
+        return () => { isMounted = false; };
+    }, [tracks, searchQuery, heroTrack?.path]);
+
+    const scrollCarousel = (direction: "left" | "right") => {
+        if (carouselRef.current) {
+            const offset = direction === "left" ? -280 : 280;
+            carouselRef.current.scrollBy({ left: offset, behavior: "smooth" });
+        }
+    };
 
     return (
-        <div style={{
-            flex: 1, backgroundColor: theme.surface, borderRadius: "24px",
-            backdropFilter: "blur(20px)", border: `1px solid ${theme.border}`,
-            boxShadow: "0 8px 32px rgba(0,0,0,0.02)", display: "flex", flexDirection: "column",
-            padding: "1.5rem", overflowY: "auto"
+        <main style={{
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            height: "100%",
+            overflowY: "auto",
+            paddingRight: "10px",
+            gap: "22px"
         }}>
+            {/* --- TOP SEARCH & NAVIGATION BAR --- */}
+            <div style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "16px",
+                padding: "4px 0"
+            }}>
+                {/* Back / Forward Buttons */}
+                <div style={{ display: "flex", gap: "6px" }}>
+                    <button
+                        title="Back"
+                        className="icon-btn"
+                        style={{
+                            width: "36px",
+                            height: "36px",
+                            borderRadius: "50%",
+                            backgroundColor: "var(--surface-solid)",
+                            border: `1px solid ${theme.border}`
+                        }}
+                    >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+                            <polyline points="15 18 9 12 15 6"></polyline>
+                        </svg>
+                    </button>
+                    <button
+                        title="Forward"
+                        className="icon-btn"
+                        style={{
+                            width: "36px",
+                            height: "36px",
+                            borderRadius: "50%",
+                            backgroundColor: "var(--surface-solid)",
+                            border: `1px solid ${theme.border}`
+                        }}
+                    >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+                            <polyline points="9 18 15 12 9 6"></polyline>
+                        </svg>
+                    </button>
+                </div>
 
-            <div style={{ display: "flex", gap: "10px", marginBottom: "1.5rem" }}>
-                <input type="text" placeholder="Search for artists, songs, or albums..." style={{ flexGrow: 1, padding: "10px 18px", backgroundColor: theme.surfaceSolid, color: theme.textDark, border: "none", borderRadius: "30px", outline: "none", boxShadow: "0 2px 10px rgba(0,0,0,0.02)" }} />
-            </div>
-
-            <h2 style={{ fontSize: "1.2rem", fontWeight: "bold", margin: "0 0 0.8rem 0", color: theme.textDark }}>
-                {currentTrack ? "Now Playing" : "Most Played"}
-            </h2>
-
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "1.5rem", marginBottom: "2rem", flexShrink: 0 }}>
+                {/* Pill Search Bar */}
                 <div style={{
-                    width: "260px", height: "260px", borderRadius: "20px", flexShrink: 0,
-                    background: displayArt ? `url(${displayArt}) center/cover no-repeat` : `linear-gradient(135deg, #b09fff, #f6e6ff)`,
-                    boxShadow: "0 10px 30px rgba(0,0,0,0.06)", display: "flex", alignItems: "flex-end", padding: "1rem", position: "relative", overflow: "hidden", transition: "background 0.3s ease"
+                    flex: 1,
+                    maxWidth: "460px",
+                    position: "relative",
+                    display: "flex",
+                    alignItems: "center"
                 }}>
-                    <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "60%", background: "linear-gradient(transparent, rgba(0,0,0,0.7))" }} />
-                    <div style={{ position: "relative", zIndex: 1, color: "#fff" }}>
-                        <h3 style={{ margin: 0, fontSize: "1.2rem", textShadow: "0 2px 10px rgba(0,0,0,0.5)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "180px" }}>{displayTrack ? displayTrack.title : "Vibe Engine"}</h3>
-                        <p style={{ margin: "3px 0 0 0", fontSize: "0.8rem", opacity: 0.9, textShadow: "0 2px 5px rgba(0,0,0,0.5)" }}>{displayTrack ? displayTrack.artist : "Add music in Settings"}</p>
-                    </div>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" style={{ position: "absolute", left: "14px", pointerEvents: "none" }}>
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                    <input
+                        type="search"
+                        placeholder="Search for songs, artists etc."
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                        style={{
+                            width: "100%",
+                            padding: "10px 16px 10px 42px",
+                            borderRadius: "24px",
+                            backgroundColor: "var(--surface-solid)",
+                            border: `1px solid ${theme.border}`,
+                            color: "var(--text-dark)",
+                            fontSize: "0.88rem",
+                            outline: "none"
+                        }}
+                    />
+                    {searchQuery && (
+                        <button
+                            onClick={() => setSearchQuery("")}
+                            style={{ position: "absolute", right: "12px", color: "var(--text-muted)", fontSize: "0.8rem", padding: "4px" }}
+                        >
+                            ✕
+                        </button>
+                    )}
                 </div>
 
-                <div style={{ flex: "1 1 300px", display: "flex", flexDirection: "column", gap: "2px", justifyContent: "center" }}>
-                    {mostPlayed.map((track, index) => (
-                        <div key={index} onClick={() => handlePlayTrack(track)} style={{ display: "flex", alignItems: "center", padding: "8px 12px", borderRadius: "10px", cursor: "pointer", backgroundColor: currentTrack?.path === track.path ? theme.surfaceSolid : "transparent", transition: "all 0.2s ease" }}>
-                            <span style={{ width: "25px", fontSize: "0.8rem", color: theme.textMuted, fontWeight: "500" }}>{index + 1}</span>
-                            <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-                                <strong style={{ fontSize: "0.85rem", color: theme.textDark }}>{track.title}</strong>
-                                <span style={{ fontSize: "0.75rem", color: theme.textMuted, marginTop: "1px" }}>{track.artist}</span>
+                {/* Right Header Actions */}
+                <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "12px" }}>
+                    <button
+                        onClick={onOpenSettings}
+                        title="Settings"
+                        className="icon-btn"
+                        style={{
+                            width: "38px",
+                            height: "38px",
+                            borderRadius: "50%",
+                            backgroundColor: "var(--surface-solid)",
+                            border: `1px solid ${theme.border}`
+                        }}
+                    >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                        </svg>
+                    </button>
+
+                    {/* Cyan "Sync Library" Action Button */}
+                    <button
+                        onClick={onSyncLibrary}
+                        disabled={isScanning}
+                        style={{
+                            padding: "9px 20px",
+                            borderRadius: "24px",
+                            backgroundColor: "var(--primary)",
+                            color: "#0c0f14",
+                            fontWeight: "700",
+                            fontSize: "0.84rem",
+                            boxShadow: "0 4px 16px var(--primary-glow)",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            transition: "transform 0.15s ease"
+                        }}
+                        onMouseOver={e => e.currentTarget.style.transform = "scale(1.03)"}
+                        onMouseOut={e => e.currentTarget.style.transform = "scale(1)"}
+                    >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" width="15" height="15">
+                            <polyline points="23 4 23 10 17 10"></polyline>
+                            <polyline points="1 20 1 14 7 14"></polyline>
+                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                        </svg>
+                        {isScanning ? "Scanning..." : "Sync Library"}
+                    </button>
+                </div>
+            </div>
+
+            {/* --- HERO BANNER: "ARTIST OF THE MONTH" / FEATURED --- */}
+            {heroTrack && (
+                <div className="glass-panel" style={{
+                    minHeight: "220px",
+                    borderRadius: "24px",
+                    position: "relative",
+                    overflow: "hidden",
+                    display: "flex",
+                    alignItems: "center",
+                    padding: "28px 32px",
+                    background: "var(--heroGradient)",
+                    border: "1px solid var(--border)"
+                }}>
+                    <div style={{ position: "relative", zIndex: 2, maxWidth: "58%" }}>
+                        <span style={{
+                            fontSize: "0.74rem",
+                            fontWeight: "700",
+                            letterSpacing: "1px",
+                            textTransform: "uppercase",
+                            color: "var(--primary)",
+                            display: "block",
+                            marginBottom: "8px"
+                        }}>
+                            Featured Sound
+                        </span>
+
+                        <h1 style={{
+                            fontSize: "clamp(1.8rem, 3.2vw, 2.6rem)",
+                            fontWeight: "800",
+                            color: "var(--text-dark)",
+                            margin: "0 0 6px 0",
+                            lineHeight: 1.1,
+                            letterSpacing: "-0.5px"
+                        }}>
+                            {heroTrack.artist}
+                        </h1>
+
+                        <p style={{
+                            fontSize: "1.05rem",
+                            color: "var(--text-muted)",
+                            margin: "0 0 16px 0",
+                            fontWeight: "500"
+                        }}>
+                            {heroTrack.title} · {heroTrack.album || "Single"}
+                        </p>
+
+                        {/* Social listening stats badge */}
+                        <div style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "16px",
+                            fontSize: "0.78rem",
+                            color: "var(--text-muted)",
+                            marginBottom: "20px"
+                        }}>
+                            <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <polyline points="12 6 12 12 16 14"></polyline>
+                                </svg>
+                                {formatTime(heroTrack.duration)}
+                            </span>
+                            <span style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                                <svg viewBox="0 0 24 24" fill={isHeroFavorite ? "var(--primary)" : "none"} stroke={isHeroFavorite ? "var(--primary)" : "currentColor"} strokeWidth="2" width="14" height="14">
+                                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                                </svg>
+                                {isHeroFavorite ? "Favorited" : "Like"}
+                            </span>
+                        </div>
+
+                        {/* Banner Action Buttons */}
+                        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                            <button
+                                onClick={() => {
+                                    if (currentTrack?.path === heroTrack.path) {
+                                        togglePause();
+                                    } else {
+                                        handlePlayTrack(heroTrack);
+                                    }
+                                }}
+                                style={{
+                                    padding: "10px 24px",
+                                    borderRadius: "22px",
+                                    backgroundColor: "var(--primary)",
+                                    color: "#0c0f14",
+                                    fontWeight: "700",
+                                    fontSize: "0.88rem",
+                                    boxShadow: "0 4px 16px var(--primary-glow)",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "8px",
+                                    transition: "transform 0.15s ease"
+                                }}
+                                onMouseOver={e => e.currentTarget.style.transform = "scale(1.04)"}
+                                onMouseOut={e => e.currentTarget.style.transform = "scale(1)"}
+                            >
+                                {currentTrack?.path === heroTrack.path && isPlaying ? "Pause" : "Play Now"}
+                            </button>
+
+                            <button
+                                onClick={() => toggleFavorite(heroTrack.path)}
+                                style={{
+                                    padding: "10px 20px",
+                                    borderRadius: "22px",
+                                    backgroundColor: "transparent",
+                                    color: isHeroFavorite ? "var(--primary)" : "var(--text-dark)",
+                                    border: isHeroFavorite ? "1px solid var(--primary)" : `1px solid ${theme.border}`,
+                                    fontWeight: "600",
+                                    fontSize: "0.88rem",
+                                    transition: "all 0.2s ease"
+                                }}
+                            >
+                                {isHeroFavorite ? "Favorited ✓" : "Add to Liked"}
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Blended Album Artwork Visual */}
+                    <div style={{
+                        position: "absolute",
+                        right: "24px",
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        width: "210px",
+                        height: "210px",
+                        borderRadius: "20px",
+                        overflow: "hidden",
+                        boxShadow: "0 16px 40px rgba(0,0,0,0.35)",
+                        zIndex: 1
+                    }}>
+                        {(currentTrack?.path === heroTrack.path && currentAlbumArt) || albumArtCache[heroTrack.path] ? (
+                            <img
+                                src={currentTrack?.path === heroTrack.path && currentAlbumArt ? currentAlbumArt : albumArtCache[heroTrack.path]}
+                                alt=""
+                                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                            />
+                        ) : (
+                            <div style={{
+                                width: "100%",
+                                height: "100%",
+                                background: "linear-gradient(135deg, var(--surface-solid), var(--bg))",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                color: "var(--text-muted)"
+                            }}>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="48" height="48" style={{ opacity: 0.5 }}>
+                                    <path d="M9 18V5l12-2v13"></path>
+                                    <circle cx="6" cy="18" r="3"></circle>
+                                    <circle cx="18" cy="16" r="3"></circle>
+                                </svg>
                             </div>
-                            <span style={{ fontSize: "0.75rem", color: theme.textMuted }}>{track.playCount ? `${track.playCount} plays` : ""}</span>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* --- "ALBUM OF THE WEEK" / RECENT ALBUMS CAROUSEL --- */}
+            <div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+                    <h2 style={{ fontSize: "1.1rem", fontWeight: "700", color: "var(--text-dark)", margin: 0 }}>
+                        Album of the week
+                    </h2>
+                    <div style={{ display: "flex", gap: "6px" }}>
+                        <button onClick={() => scrollCarousel("left")} className="icon-btn" style={{ padding: "4px" }} title="Scroll Left">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                                <polyline points="15 18 9 12 15 6"></polyline>
+                            </svg>
+                        </button>
+                        <button onClick={() => scrollCarousel("right")} className="icon-btn" style={{ padding: "4px" }} title="Scroll Right">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                                <polyline points="9 18 15 12 9 6"></polyline>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <div
+                    ref={carouselRef}
+                    style={{
+                        display: "flex",
+                        gap: "16px",
+                        overflowX: "auto",
+                        paddingBottom: "8px",
+                        scrollbarWidth: "none"
+                    }}
+                >
+                    {albums.map(track => {
+                        const art = albumArtCache[track.path];
+                        return (
+                            <div
+                                key={track.path}
+                                onClick={() => handlePlayTrack(track)}
+                                onContextMenu={e => handleContextMenu(e, track)}
+                                className="glass-card"
+                                style={{
+                                    width: "142px",
+                                    flexShrink: 0,
+                                    padding: "10px",
+                                    cursor: "pointer"
+                                }}
+                            >
+                                <div style={{
+                                    width: "100%",
+                                    aspectRatio: "1 / 1",
+                                    borderRadius: "14px",
+                                    overflow: "hidden",
+                                    backgroundColor: "var(--surface-solid)",
+                                    marginBottom: "10px",
+                                    boxShadow: "0 6px 16px rgba(0,0,0,0.18)"
+                                }}>
+                                    {art ? (
+                                        <img src={art} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                    ) : (
+                                        <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)" }}>
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="36" height="36" style={{ opacity: 0.5 }}>
+                                                <circle cx="12" cy="12" r="10"></circle>
+                                                <circle cx="12" cy="12" r="3"></circle>
+                                            </svg>
+                                        </div>
+                                    )}
+                                </div>
+                                <div style={{
+                                    fontSize: "0.85rem",
+                                    fontWeight: "700",
+                                    color: "var(--text-dark)",
+                                    whiteSpace: "nowrap",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis"
+                                }}>
+                                    {track.artist}
+                                </div>
+                                <div style={{
+                                    fontSize: "0.75rem",
+                                    color: "var(--text-muted)",
+                                    whiteSpace: "nowrap",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    marginTop: "2px"
+                                }}>
+                                    {track.album || track.title}
+                                </div>
+                            </div>
+                        );
+                    })}
+
+                    {albums.length === 0 && (
+                        <div style={{ color: "var(--text-muted)", fontSize: "0.85rem", padding: "16px" }}>
+                            No albums found yet. Sync your music folder in Settings.
                         </div>
-                    ))}
+                    )}
                 </div>
             </div>
 
-            <h2 style={{ fontSize: "1.2rem", fontWeight: "bold", margin: "0 0 1rem 0", color: theme.textDark }}>Recently Played</h2>
-            <div style={{ display: "flex", gap: "1.5rem", overflowX: "auto", paddingBottom: "1rem" }}>
-                {/* CAROUSEL IMAGES: Increased width/height to 150px */}
-                {recentlyPlayed.map((track, index) => (
-                    <div key={index} onClick={() => handlePlayTrack(track)} style={{ display: "flex", flexDirection: "column", cursor: "pointer", width: "150px", flexShrink: 0 }}>
-                        <div style={{ width: "130px", height: "140px", borderRadius: "16px", backgroundColor: theme.surfaceSolid, marginBottom: "10px", boxShadow: "0 4px 15px rgba(0,0,0,0.04)", overflow: "hidden" }}>
-                            {artCache[track.path] && <img src={artCache[track.path]} alt="Art" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
-                        </div>
-                        <strong style={{ display: "block", fontSize: "0.85rem", color: theme.textDark, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{track.title}</strong>
-                        <span style={{ fontSize: "0.75rem", color: theme.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{track.artist}</span>
-                    </div>
-                ))}
-            </div>
+            {/* --- "POPULAR TRACKS" RANKED LIST --- */}
+            <div style={{ paddingBottom: "24px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+                    <h2 style={{ fontSize: "1.1rem", fontWeight: "700", color: "var(--text-dark)", margin: 0 }}>
+                        Popular Tracks
+                    </h2>
+                    <span style={{ fontSize: "0.78rem", color: "var(--text-muted)", cursor: "pointer" }}>
+                        See All
+                    </span>
+                </div>
 
-        </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    {popularTracks.map((track, idx) => {
+                        const rankNum = String(idx + 1).padStart(2, "0");
+                        const isCurrent = currentTrack?.path === track.path;
+                        const isFav = favorites.includes(track.path);
+                        const art = albumArtCache[track.path];
+
+                        return (
+                            <div
+                                key={track.path}
+                                className={`track-row ${isCurrent ? "is-active" : ""}`}
+                                onClick={() => handlePlayTrack(track)}
+                                onContextMenu={e => handleContextMenu(e, track)}
+                            >
+                                {/* Rank Number */}
+                                <span style={{
+                                    width: "28px",
+                                    fontSize: "0.85rem",
+                                    fontWeight: "700",
+                                    color: isCurrent ? "var(--primary)" : "var(--text-muted)"
+                                }}>
+                                    {rankNum}
+                                </span>
+
+                                {/* Mini Album Thumbnail */}
+                                <div style={{
+                                    width: "40px",
+                                    height: "40px",
+                                    borderRadius: "10px",
+                                    overflow: "hidden",
+                                    backgroundColor: "var(--surface-solid)",
+                                    marginRight: "14px",
+                                    flexShrink: 0
+                                }}>
+                                    {art ? (
+                                        <img src={art} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                    ) : (
+                                        <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)" }}>
+                                            <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style={{ opacity: 0.5 }}>
+                                                <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
+                                            </svg>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Title & Artist */}
+                                <div style={{ flex: 1.5, minWidth: 0 }}>
+                                    <div style={{
+                                        fontSize: "0.88rem",
+                                        fontWeight: "600",
+                                        color: isCurrent ? "var(--primary)" : "var(--text-dark)",
+                                        whiteSpace: "nowrap",
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis"
+                                    }}>
+                                        {track.title}
+                                    </div>
+                                    <div style={{
+                                        fontSize: "0.75rem",
+                                        color: "var(--text-muted)",
+                                        whiteSpace: "nowrap",
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis"
+                                    }}>
+                                        {track.artist}
+                                    </div>
+                                </div>
+
+                                {/* Album Name */}
+                                <div style={{
+                                    flex: 1.2,
+                                    fontSize: "0.78rem",
+                                    color: "var(--text-muted)",
+                                    whiteSpace: "nowrap",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    padding: "0 10px"
+                                }}>
+                                    {track.album || "—"}
+                                </div>
+
+                                {/* Duration with Clock icon */}
+                                <div style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "5px",
+                                    fontSize: "0.76rem",
+                                    color: "var(--text-muted)",
+                                    width: "80px",
+                                    fontVariantNumeric: "tabular-nums"
+                                }}>
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12">
+                                        <circle cx="12" cy="12" r="10"></circle>
+                                        <polyline points="12 6 12 12 16 14"></polyline>
+                                    </svg>
+                                    {formatTime(track.duration)}
+                                </div>
+
+                                {/* Favorite Heart Button */}
+                                <button
+                                    onClick={e => {
+                                        e.stopPropagation();
+                                        toggleFavorite(track.path);
+                                    }}
+                                    title={isFav ? "Unlike" : "Like"}
+                                    className="icon-btn"
+                                    style={{
+                                        padding: "6px",
+                                        color: isFav ? "var(--primary)" : "var(--text-muted)",
+                                        marginRight: "10px"
+                                    }}
+                                >
+                                    <svg viewBox="0 0 24 24" fill={isFav ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" width="16" height="16">
+                                        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                                    </svg>
+                                </button>
+
+                                {/* Row Play Button */}
+                                <button
+                                    onClick={e => {
+                                        e.stopPropagation();
+                                        if (isCurrent) {
+                                            togglePause();
+                                        } else {
+                                            handlePlayTrack(track);
+                                        }
+                                    }}
+                                    title={isCurrent && isPlaying ? "Pause" : "Play"}
+                                    style={{
+                                        width: "32px",
+                                        height: "32px",
+                                        borderRadius: "50%",
+                                        backgroundColor: isCurrent ? "var(--primary)" : "var(--surface-solid)",
+                                        color: isCurrent ? "#0c0f14" : "var(--text-dark)",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        border: `1px solid ${theme.border}`,
+                                        boxShadow: isCurrent ? "0 2px 8px var(--primary-glow)" : "none"
+                                    }}
+                                >
+                                    {isCurrent && isPlaying ? (
+                                        <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13">
+                                            <rect x="6" y="4" width="4" height="16"></rect>
+                                            <rect x="14" y="4" width="4" height="16"></rect>
+                                        </svg>
+                                    ) : (
+                                        <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" style={{ marginLeft: "2px" }}>
+                                            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                                        </svg>
+                                    )}
+                                </button>
+                            </div>
+                        );
+                    })}
+
+                    {popularTracks.length === 0 && (
+                        <div style={{ textAlign: "center", padding: "40px", color: "var(--text-muted)" }}>
+                            No tracks found matching your library. Click "Sync Library" to load your music.
+                        </div>
+                    )}
+                </div>
+            </div>
+        </main>
     );
 }

@@ -1,5 +1,5 @@
 [package]
-name = "npm"
+name = "aura"
 version = "0.1.0"
 description = "A Tauri App"
 authors = ["you"]
@@ -22,3 +22,9 @@ base64 = "0.22.1"
 tauri-plugin-global-shortcut = "2.3.2"
 tauri-plugin-dialog = "2.7.1"
 
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

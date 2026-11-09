@@ -1,40 +1,59 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod scanner;
 mod audio;
+mod scanner;
 mod tray;
 
-use tauri::{menu::{Menu, MenuItem}, tray::TrayIconBuilder, Manager};
 use std::process::Command;
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::TrayIconBuilder,
+    Manager,
+};
 
 #[tauri::command]
-fn show_in_explorer(path: String) {
+fn toggle_fullscreen(window: tauri::Window) -> Result<bool, String> {
+    let is_fullscreen = window.is_fullscreen().map_err(|e| e.to_string())?;
+    window.set_fullscreen(!is_fullscreen).map_err(|e| e.to_string())?;
+    Ok(!is_fullscreen)
+}
+
+#[tauri::command]
+fn minimize_window(window: tauri::Window) -> Result<(), String> {
+    window.minimize().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn maximize_window(window: tauri::Window) -> Result<(), String> {
+    let is_maximized = window.is_maximized().map_err(|e| e.to_string())?;
+    if is_maximized {
+        window.unmaximize().map_err(|e| e.to_string())?;
+    } else {
+        window.maximize().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn close_window(window: tauri::Window) -> Result<(), String> {
+    window.close().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn show_in_explorer(path: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         Command::new("explorer")
-            .args(["/select,", &path]) // The comma is important for Windows to highlight the file
+            .args(["/select,", &path])
             .spawn()
-            .unwrap();
+            .map_err(|error| format!("Could not open File Explorer: {error}"))?;
     }
 
-    #[cfg(target_os = "macos")]
-    {
-        Command::new("open")
-            .args(["-R", &path]) // -R reveals the file in Finder
-            .spawn()
-            .unwrap();
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        // Linux varies heavily, but usually opening the parent directory is the safest fallback
-        if let Some(parent) = std::path::Path::new(&path).parent() {
-            Command::new("xdg-open")
-                .arg(parent)
-                .spawn()
-                .unwrap();
-        }
-    }
+    #[cfg(not(target_os = "windows"))]
+    let _ = path;
+    Ok(())
 }
 
 fn main() {
@@ -47,10 +66,10 @@ fn main() {
             let menu = Menu::with_items(app, &[&show_i, &quit_i])?;
 
             let _tray = TrayIconBuilder::new()
-                .icon(app.default_window_icon().unwrap().clone()) 
+                .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
                 .on_menu_event(|app, event| match event.id.as_ref() {
-                    "quit" => std::process::exit(0), 
+                    "quit" => std::process::exit(0),
                     "show" => {
                         if let Some(window) = app.get_webview_window("main") {
                             let _ = window.show();
@@ -71,7 +90,6 @@ fn main() {
 
             Ok(())
         })
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             scanner::scan_directory,
@@ -86,7 +104,11 @@ fn main() {
             audio::set_volume,
             audio::refresh_audio_device,
             tray::send_app_to_tray,
-            show_in_explorer
+            show_in_explorer,
+            toggle_fullscreen,
+            minimize_window,
+            maximize_window,
+            close_window
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
