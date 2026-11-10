@@ -24,6 +24,7 @@ import ArtistsView from "./components/ArtistsView";
 import AlbumsView from "./components/AlbumsView";
 import AnalyticsView from "./components/AnalyticsView";
 import ProfileModal from "./components/ProfileModal";
+import FullScreenPlayer from "./components/FullScreenPlayer";
 
 export default function App() {
   const [activeTab, setActiveTab] = useState(() => {
@@ -100,6 +101,12 @@ export default function App() {
 
   // Sleep timer state (remaining seconds)
   const [sleepTimerRemaining, setSleepTimerRemaining] = useState<number | null>(null);
+
+  // Lyrics panel visibility in right sidebar
+  const [showLyrics, setShowLyrics] = useState(false);
+
+  // Full Screen immersive player
+  const [isFullScreenPlayer, setIsFullScreenPlayer] = useState(false);
 
   const [menuState, setMenuState] = useState<{
     visible: boolean;
@@ -432,6 +439,7 @@ export default function App() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "F11") {
         e.preventDefault();
+        setIsFullScreenPlayer(prev => !prev);
         void invoke("toggle_fullscreen");
         return;
       }
@@ -612,35 +620,44 @@ export default function App() {
               filterOnlyFavorites={true}
             />
           ) : (
-            <>
-              {/* EXPLORE (HOME) */}
-              <MainContent
-                tracks={tracks}
-                currentTrack={currentTrack}
-                currentAlbumArt={albumArt}
-                isPlaying={isPlaying}
-                handlePlayTrack={handlePlayTrack}
-                togglePause={togglePause}
-                handleContextMenu={handleContextMenu}
-                searchQuery={searchQuery}
-                setSearchQuery={setSearchQuery}
-                favorites={favorites}
-                toggleFavorite={toggleFavorite}
-                onSyncLibrary={handleScan}
-                isScanning={isScanning}
-                onOpenSettings={() => setActiveTab("settings")}
-              />
+            <MainContent
+              tracks={tracks}
+              currentTrack={currentTrack}
+              currentAlbumArt={albumArt}
+              isPlaying={isPlaying}
+              handlePlayTrack={handlePlayTrack}
+              togglePause={togglePause}
+              handleContextMenu={handleContextMenu}
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              favorites={favorites}
+              toggleFavorite={toggleFavorite}
+              onSyncLibrary={handleScan}
+              isScanning={isScanning}
+              onOpenSettings={() => setActiveTab("settings")}
+            />
+          )}
 
-              {/* RIGHT PANEL: NOW PLAYING COVER ART & TRENDING ARTISTS */}
-              <TopArtistsPanel
-                tracks={tracks}
-                currentTrack={currentTrack}
-                currentAlbumArt={albumArt}
-                handlePlayTrack={handlePlayTrack}
-                queue={queue}
-                removeFromQueue={idx => setQueue(prev => prev.filter((_, i) => i !== idx))}
-              />
-            </>
+          {/* RIGHT PANEL: NOW PLAYING COVER ART & TRENDING ARTISTS (or LYRICS) */}
+          {(activeTab === "home" || showLyrics) && (
+            <TopArtistsPanel
+              tracks={tracks}
+              currentTrack={currentTrack}
+              currentAlbumArt={albumArt}
+              handlePlayTrack={handlePlayTrack}
+              queue={queue}
+              removeFromQueue={idx => setQueue(prev => prev.filter((_, i) => i !== idx))}
+              showLyrics={showLyrics}
+              setShowLyrics={setShowLyrics}
+              progress={progress}
+              isPlaying={isPlaying}
+              handleSeek={handleSeek}
+              notify={notify}
+              onOpenFullScreen={() => {
+                setIsFullScreenPlayer(true);
+                void invoke("toggle_fullscreen");
+              }}
+            />
           )}
         </div>
       </div>
@@ -667,7 +684,48 @@ export default function App() {
         handleShowInExplorer={handleShowInExplorer}
         sleepTimerRemaining={sleepTimerRemaining}
         setSleepTimer={setSleepTimer}
+        showLyrics={showLyrics}
+        toggleLyrics={() => setShowLyrics(prev => !prev)}
+        isFullScreen={isFullScreenPlayer}
+        toggleFullScreen={() => {
+          setIsFullScreenPlayer(prev => {
+            const next = !prev;
+            void invoke("toggle_fullscreen");
+            return next;
+          });
+        }}
       />
+
+      {/* 4. FULL SCREEN IMMERSIVE PLAYER (IDENTICAL TO SUNG) */}
+      {isFullScreenPlayer && (
+        <FullScreenPlayer
+          currentTrack={currentTrack}
+          albumArt={albumArt}
+          isPlaying={isPlaying}
+          progress={progress}
+          togglePause={togglePause}
+          playNext={playNext}
+          playPrev={playPrev}
+          handleSeek={handleSeek}
+          volume={volume}
+          handleVolumeChange={handleVolumeChange}
+          toggleMute={toggleMute}
+          shuffle={shuffle}
+          setShuffle={setShuffle}
+          repeat={repeat}
+          setRepeat={setRepeat}
+          isFavorite={isCurrentFavorite}
+          toggleFavorite={() => currentTrack && toggleFavorite(currentTrack.path)}
+          onClose={() => {
+            setIsFullScreenPlayer(false);
+            void invoke("toggle_fullscreen");
+          }}
+          notify={notify}
+          queue={queue}
+          removeFromQueue={idx => setQueue(prev => prev.filter((_, i) => i !== idx))}
+          handlePlayTrack={handlePlayTrack}
+        />
+      )}
 
       {/* USER PROFILE MODAL */}
       {showProfileModal && (
@@ -694,6 +752,12 @@ export default function App() {
           addToQueue={track => setQueue(prev => [...prev, track])}
           isFavorite={favorites.includes(menuState.track.path)}
           toggleFavorite={toggleFavorite}
+          onViewLyrics={track => {
+            if (currentTrack?.path !== track.path) {
+              void handlePlayTrack(track);
+            }
+            setShowLyrics(true);
+          }}
         />
       )}
 

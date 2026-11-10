@@ -4,6 +4,7 @@ mod audio;
 mod scanner;
 mod tray;
 
+#[cfg(target_os = "windows")]
 use std::process::Command;
 use tauri::{
     menu::{Menu, MenuItem},
@@ -16,6 +17,11 @@ fn toggle_fullscreen(window: tauri::Window) -> Result<bool, String> {
     let is_fullscreen = window.is_fullscreen().map_err(|e| e.to_string())?;
     window.set_fullscreen(!is_fullscreen).map_err(|e| e.to_string())?;
     Ok(!is_fullscreen)
+}
+
+#[tauri::command]
+fn set_fullscreen(window: tauri::Window, fullscreen: bool) -> Result<(), String> {
+    window.set_fullscreen(fullscreen).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -94,6 +100,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             scanner::scan_directory,
             scanner::get_album_art,
+            scanner::get_lyrics,
+            scanner::save_lyrics_sidecar,
             audio::play_audio,
             audio::pause_audio,
             audio::resume_audio,
@@ -106,6 +114,7 @@ fn main() {
             tray::send_app_to_tray,
             show_in_explorer,
             toggle_fullscreen,
+            set_fullscreen,
             minimize_window,
             maximize_window,
             close_window

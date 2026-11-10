@@ -23,6 +23,10 @@ interface PlayerDockProps {
     handleShowInExplorer?: () => void;
     sleepTimerRemaining: number | null;
     setSleepTimer: (minutes: number | null) => void;
+    showLyrics?: boolean;
+    toggleLyrics?: () => void;
+    isFullScreen?: boolean;
+    toggleFullScreen?: () => void;
 }
 
 export default function PlayerDock({
@@ -45,7 +49,11 @@ export default function PlayerDock({
     toggleFavorite,
     handleShowInExplorer,
     sleepTimerRemaining,
-    setSleepTimer
+    setSleepTimer,
+    showLyrics = false,
+    toggleLyrics,
+    isFullScreen = false,
+    toggleFullScreen
 }: PlayerDockProps) {
     const [isScrubbing, setIsScrubbing] = useState(false);
     const [scrubValue, setScrubValue] = useState(0);
@@ -436,6 +444,56 @@ export default function PlayerDock({
                             <polyline points="15 3 21 3 21 9"></polyline>
                             <line x1="10" y1="14" x2="21" y2="3"></line>
                         </svg>
+                    </button>
+                )}
+
+                {/* Lyrics Button */}
+                {toggleLyrics && (
+                    <button
+                        onClick={toggleLyrics}
+                        title={showLyrics ? "Hide lyrics" : "Show lyrics"}
+                        className="icon-btn"
+                        style={{
+                            color: showLyrics ? "var(--primary)" : "var(--text-muted)",
+                            backgroundColor: showLyrics ? "var(--primary-soft)" : "transparent",
+                            borderRadius: "8px",
+                            padding: "6px",
+                            transition: "all 0.18s ease"
+                        }}
+                    >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+                            <path d="M9 18V5l12-2v13"></path>
+                            <circle cx="6" cy="18" r="3"></circle>
+                            <circle cx="18" cy="16" r="3"></circle>
+                            <line x1="3" y1="9" x2="9" y2="9"></line>
+                            <line x1="3" y1="13" x2="7" y2="13"></line>
+                        </svg>
+                    </button>
+                )}
+
+                {/* Full Screen Player Button */}
+                {toggleFullScreen && (
+                    <button
+                        onClick={toggleFullScreen}
+                        title={isFullScreen ? "Exit full screen (Esc)" : "Full screen player (F11)"}
+                        className="icon-btn"
+                        style={{
+                            color: isFullScreen ? "var(--primary)" : "var(--text-muted)",
+                            backgroundColor: isFullScreen ? "var(--primary-soft)" : "transparent",
+                            borderRadius: "8px",
+                            padding: "6px",
+                            transition: "all 0.18s ease"
+                        }}
+                    >
+                        {isFullScreen ? (
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+                                <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"></path>
+                            </svg>
+                        ) : (
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+                                <path d="M15 3h6v6m0 6v6h-6M9 21H3v-6M3 9V3h6"></path>
+                            </svg>
+                        )}
                     </button>
                 )}
 

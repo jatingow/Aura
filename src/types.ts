@@ -8,6 +8,23 @@ export interface Track {
     lastPlayed?: number;
 }
 
+export interface LyricLine {
+    start: number; // in milliseconds (-1 for untimed)
+    end: number;   // in milliseconds
+    text: string;
+}
+
+export type LyricsSource = "embedded" | "sidecar" | "lrclib" | "imported" | "cache";
+
+export interface SongLyrics {
+    trackPath: string;
+    source: LyricsSource;
+    isSynced: boolean;
+    rawLrc?: string;
+    plainLyrics?: string;
+    lines: LyricLine[];
+}
+
 export type BaseTheme = "dark" | "amoled" | "light";
 
 export interface AccentColor {

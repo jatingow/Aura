@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
 import { BaseTheme, AccentColor, ACCENT_COLORS, Track } from "../types";
+import { isLrclibFallbackEnabled, setLrclibFallbackEnabled, clearLyricsCache, getCachedLyricsCount } from "../lyricsService";
 
 interface SettingsProps {
     scanPath: string;
@@ -61,6 +63,9 @@ export default function Settings({
     const totalHours = (totalSeconds / 3600).toFixed(1);
     const uniqueArtists = new Set(tracks.map(t => t.artist)).size;
     const uniqueAlbums = new Set(tracks.map(t => t.album)).size;
+
+    const [lrclibEnabled, setLrclibEnabled] = useState(() => isLrclibFallbackEnabled());
+    const [cachedCount, setCachedCount] = useState(() => getCachedLyricsCount());
 
     return (
         <main className="glass-panel" style={{
@@ -335,7 +340,83 @@ export default function Settings({
                 </div>
             </div>
 
-            {/* 4. KEYBOARD SHORTCUTS REFERENCE */}
+            {/* 4. LYRICS & METADATA CARD */}
+            <div className="glass-card" style={{ padding: "22px", borderRadius: "18px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                <div>
+                    <h3 style={{ margin: "0 0 4px 0", fontSize: "1.05rem", color: "var(--text-dark)" }}>
+                        Lyrics & Providers
+                    </h3>
+                    <p style={{ margin: 0, color: "var(--text-muted)", fontSize: "0.82rem" }}>
+                        Aura is offline-first. It prioritizes embedded audio tags and local sidecar .lrc files.
+                    </p>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px", borderRadius: "12px", backgroundColor: "var(--surface)" }}>
+                    <div>
+                        <div style={{ fontSize: "0.88rem", fontWeight: "600", color: "var(--text-dark)" }}>
+                            Online LRCLIB Fallback
+                        </div>
+                        <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: "2px" }}>
+                            Automatically query LRCLIB for synchronized and plain lyrics when local lyrics are absent.
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => {
+                            const next = !lrclibEnabled;
+                            setLrclibEnabled(next);
+                            setLrclibFallbackEnabled(next);
+                            notify(next ? "LRCLIB fallback enabled" : "LRCLIB fallback disabled (Strict offline)");
+                        }}
+                        style={{
+                            padding: "8px 18px",
+                            borderRadius: "10px",
+                            border: "none",
+                            backgroundColor: lrclibEnabled ? "var(--primary)" : "var(--surface-solid)",
+                            color: lrclibEnabled ? "#0c0f14" : "var(--text-muted)",
+                            fontWeight: "700",
+                            fontSize: "0.82rem",
+                            cursor: "pointer",
+                            transition: "all 0.2s ease"
+                        }}
+                    >
+                        {lrclibEnabled ? "Enabled" : "Disabled"}
+                    </button>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px", borderRadius: "12px", backgroundColor: "var(--surface)" }}>
+                    <div>
+                        <div style={{ fontSize: "0.88rem", fontWeight: "600", color: "var(--text-dark)" }}>
+                            Lyrics Cache
+                        </div>
+                        <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: "2px" }}>
+                            Currently cached offline: <strong style={{ color: "var(--text-dark)" }}>{cachedCount}</strong> songs
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => {
+                            clearLyricsCache();
+                            setCachedCount(0);
+                            notify("Lyrics cache cleared successfully.");
+                        }}
+                        disabled={cachedCount === 0}
+                        style={{
+                            padding: "8px 16px",
+                            borderRadius: "10px",
+                            border: "1px solid var(--border)",
+                            backgroundColor: "var(--surface-solid)",
+                            color: cachedCount === 0 ? "var(--text-muted)" : "#f87171",
+                            fontWeight: "600",
+                            fontSize: "0.82rem",
+                            cursor: cachedCount === 0 ? "default" : "pointer",
+                            opacity: cachedCount === 0 ? 0.5 : 1
+                        }}
+                    >
+                        Clear Cache
+                    </button>
+                </div>
+            </div>
+
+            {/* 5. KEYBOARD SHORTCUTS REFERENCE */}
             <div className="glass-card" style={{ padding: "22px", borderRadius: "18px" }}>
                 <h3 style={{ margin: "0 0 10px 0", fontSize: "1.05rem", color: "var(--text-dark)" }}>
                     Keyboard Shortcuts
@@ -354,8 +435,8 @@ export default function Settings({
                         <kbd style={{ padding: "2px 8px", borderRadius: "6px", backgroundColor: "var(--surface)", color: "var(--text-dark)" }}>Alt + Shift + ←</kbd>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
-                        <span style={{ color: "var(--text-muted)" }}>Global Play/Pause</span>
-                        <kbd style={{ padding: "2px 8px", borderRadius: "6px", backgroundColor: "var(--surface)", color: "var(--text-dark)" }}>MediaPlayPause</kbd>
+                        <span style={{ color: "var(--text-muted)" }}>Full Screen Player</span>
+                        <kbd style={{ padding: "2px 8px", borderRadius: "6px", backgroundColor: "var(--surface)", color: "var(--text-dark)" }}>F11 / Esc</kbd>
                     </div>
                 </div>
             </div>

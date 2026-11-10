@@ -12,6 +12,7 @@ interface ContextMenuProps {
     addToQueue: (track: Track) => void;
     isFavorite: boolean;
     toggleFavorite: (path: string) => void;
+    onViewLyrics?: (track: Track) => void;
 }
 
 export default function ContextMenu({
@@ -23,7 +24,8 @@ export default function ContextMenu({
     insertNext,
     addToQueue,
     isFavorite,
-    toggleFavorite
+    toggleFavorite,
+    onViewLyrics
 }: ContextMenuProps) {
     const menuRef = useRef<HTMLDivElement>(null);
 
@@ -58,6 +60,7 @@ export default function ContextMenu({
         { label: "Play Now", action: () => { handlePlayTrack(track); closeMenu(); } },
         { label: "Play Next", action: () => { insertNext(track); closeMenu(); } },
         { label: "Add to Queue", action: () => { addToQueue(track); closeMenu(); } },
+        ...(onViewLyrics ? [{ label: "View Lyrics", action: () => { onViewLyrics(track); closeMenu(); } }] : []),
         {
             label: isFavorite ? "Remove from Liked" : "Add to Liked",
             action: () => { toggleFavorite(track.path); closeMenu(); }
