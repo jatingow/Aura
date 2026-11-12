@@ -75,11 +75,14 @@ Clean, distraction-free full-screen synchronized lyrics view with large typograp
 - **Studio Audio Fade-In & Fade-Out**: Smooth volume crossfade transitions when switching tracks, pausing, and resuming playback. Configurable transition speeds in Settings (*Instant*, *Fast 200ms*, *Smooth 350ms*, *Studio 600ms*).
 - **Smart Playback Fallback**: Clicking Play or Next without a selected track immediately starts playing your library or resumes your last played song.
 
-### ⏱️ Customizable Sleep Timer
-- Bedtime sleep timer accessible right from the bottom player dock.
-- Quick presets (**15 min**, **30 min**, **45 min**, **60 min**) or enter **custom minutes** (e.g. 25m, 90m).
-- Live countdown badge in the dock and sidebar.
-- Music **smoothly fades out** over 2 seconds before automatically pausing playback when time is up.
+### ⏱️ Customizable Sleep Timer (Minutes & Track Count Modes)
+- Accessible directly from the bottom player dock and sidebar.
+- **Minutes Mode**: Quick presets (**15m**, **30m**, **45m**, **60m**) or custom minutes with live countdown badge.
+- **Stop After N Tracks Mode**:
+  - Automatically halts playback after completing a chosen number of songs (**1 track / current song**, **2 tracks**, **3 tracks**, **5 tracks**, or custom count).
+  - Current song counts as track 1; counter decrements only when songs finish naturally.
+  - Manual track skips do not consume counts; repeat-one looping is safely ignored.
+- **Studio Audio Fade-Out**: Music smoothly fades out over 1.6 seconds before automatically pausing when the timer expires.
 
 ### 📊 Dedicated Listening Analytics Tab
 - Dedicated analytics dashboard tracking all listening habits:
@@ -124,8 +127,9 @@ Clean, distraction-free full-screen synchronized lyrics view with large typograp
 ### Backend
 - **Core Framework:** Tauri v2
 - **Language:** Rust (2021 edition)
-- **Audio Decoding & Playback:** `rodio` + `std::io::BufReader`
-- **Metadata & Cover Art:** `lofty`
+- **Audio Decoding & Playback:** `rodio` (random-access seeking & seekable builder) + `std::io::BufReader`
+- **Metadata Extraction:** `lofty`
+- **Artwork Optimization:** `image` (dynamic downscaling & JPEG quality 85 encoding)
 - **Filesystem Traversal:** `walkdir`
 - **Native OS Dialogs & Shortcuts:** `@tauri-apps/plugin-dialog`, `@tauri-apps/plugin-global-shortcut`
 
@@ -165,7 +169,12 @@ Clean, distraction-free full-screen synchronized lyrics view with large typograp
    npm run tauri dev
    ```
 
-3. Build production release executables:
+3. Fast verification check (verifies TypeScript, Vite bundling, and Rust borrow checker in ~2 seconds):
+   ```bash
+   npm run build; cargo check --manifest-path src-tauri/Cargo.toml
+   ```
+
+4. Build production release executables:
    ```bash
    npm run tauri build
    ```

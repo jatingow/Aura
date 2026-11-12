@@ -101,6 +101,10 @@ export default function App() {
 
   // Sleep timer state (remaining seconds)
   const [sleepTimerRemaining, setSleepTimerRemaining] = useState<number | null>(null);
+  const [sleepTimerTracksRemaining, setSleepTimerTracksRemaining] = useState<number | null>(null);
+  const sleepTimerTracksRef = useRef<number | null>(null);
+  sleepTimerTracksRef.current = sleepTimerTracksRemaining;
+  const lastCompletedTrackPathRef = useRef<string | null>(null);
 
   // Lyrics panel visibility in right sidebar
   const [showLyrics, setShowLyrics] = useState(false);
@@ -296,6 +300,48 @@ export default function App() {
       return;
     }
 
+    // --- SLEEP TIMER: STOP AFTER N TRACKS ---
+    if (isAutoAdvance && sleepTimerTracksRef.current !== null) {
+      const currNormPath = curr.path.toLowerCase();
+
+      // Edge case: Repeat-one mode ("Do not count repeated playback of the same track as a newly completed track")
+      if (repeatRef.current === "one") {
+        void handlePlayTrack(curr, false);
+        return;
+      }
+
+      // Edge case: Prevent duplicate completion events from counting the same track multiple times
+      if (lastCompletedTrackPathRef.current !== currNormPath) {
+        lastCompletedTrackPathRef.current = currNormPath;
+        const currentRemaining = sleepTimerTracksRef.current;
+        const nextRemaining = currentRemaining - 1;
+
+        if (nextRemaining <= 0) {
+          // Timer reached 0! All N tracks have finished naturally.
+          setSleepTimerTracksRemaining(null);
+          sleepTimerTracksRef.current = null;
+          lastCompletedTrackPathRef.current = null;
+
+          void (async () => {
+            const currentVol = volumeRef.current;
+            await fadeAudio(currentVol, 0, 1600);
+            try {
+              await invoke("pause_audio");
+            } catch (e) {}
+            setIsPlaying(false);
+            setProgress(0);
+            progressRef.current = 0;
+            endedTrackRef.current = null;
+            notify("Sleep timer finished. Playback stopped 🌙");
+          })();
+          return;
+        } else {
+          setSleepTimerTracksRemaining(nextRemaining);
+          sleepTimerTracksRef.current = nextRemaining;
+        }
+      }
+    }
+
     if (repeatRef.current === "one" && isAutoAdvance) {
       void handlePlayTrack(curr, false);
       return;
@@ -331,6 +377,9 @@ export default function App() {
         setProgress(0);
         progressRef.current = 0;
         endedTrackRef.current = null;
+        setSleepTimerTracksRemaining(null);
+        sleepTimerTracksRef.current = null;
+        lastCompletedTrackPathRef.current = null;
         try { invoke("stop_audio"); } catch (e) {}
       }
     }
@@ -440,8 +489,28 @@ export default function App() {
       setSleepTimerRemaining(null);
       notify("Sleep timer turned off.");
     } else {
+      // Clear track-based timer if active
+      setSleepTimerTracksRemaining(null);
+      sleepTimerTracksRef.current = null;
+      lastCompletedTrackPathRef.current = null;
       setSleepTimerRemaining(minutes * 60);
       notify(`Sleep timer set: ${minutes} minutes 🌙`);
+    }
+  };
+
+  const setSleepTimerTracks = (tracksCount: number | null) => {
+    if (tracksCount === null) {
+      setSleepTimerTracksRemaining(null);
+      sleepTimerTracksRef.current = null;
+      lastCompletedTrackPathRef.current = null;
+      notify("Track sleep timer turned off.");
+    } else {
+      // Clear minute-based timer if active
+      setSleepTimerRemaining(null);
+      setSleepTimerTracksRemaining(tracksCount);
+      sleepTimerTracksRef.current = tracksCount;
+      lastCompletedTrackPathRef.current = null;
+      notify(`Sleep timer set: Stop after ${tracksCount} ${tracksCount === 1 ? "track" : "tracks"} 🌙`);
     }
   };
 
@@ -620,7 +689,15 @@ export default function App() {
           activeTab={activeTab}
           setActiveTab={setActiveTab}
           sleepTimerRemaining={sleepTimerRemaining}
-          onOpenSleepTimer={() => setSleepTimer(sleepTimerRemaining ? null : 30)}
+          sleepTimerTracksRemaining={sleepTimerTracksRemaining}
+          onOpenSleepTimer={() => {
+            if (sleepTimerRemaining !== null || sleepTimerTracksRemaining !== null) {
+              setSleepTimer(null);
+              setSleepTimerTracks(null);
+            } else {
+              setSleepTimer(30);
+            }
+          }}
           profile={profile}
           onOpenProfile={() => setShowProfileModal(true)}
         />
@@ -765,7 +842,9 @@ export default function App() {
         toggleFavorite={() => currentTrack && toggleFavorite(currentTrack.path)}
         handleShowInExplorer={handleShowInExplorer}
         sleepTimerRemaining={sleepTimerRemaining}
+        sleepTimerTracksRemaining={sleepTimerTracksRemaining}
         setSleepTimer={setSleepTimer}
+        setSleepTimerTracks={setSleepTimerTracks}
         showLyrics={showLyrics}
         toggleLyrics={() => setShowLyrics(prev => !prev)}
         isFullScreen={isFullScreenPlayer}

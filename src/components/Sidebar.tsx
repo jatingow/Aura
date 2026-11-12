@@ -4,6 +4,7 @@ interface SidebarProps {
     activeTab: string;
     setActiveTab: (tab: string) => void;
     sleepTimerRemaining: number | null;
+    sleepTimerTracksRemaining: number | null;
     onOpenSleepTimer: () => void;
     profile: UserProfile;
     onOpenProfile: () => void;
@@ -13,6 +14,7 @@ export default function Sidebar({
     activeTab,
     setActiveTab,
     sleepTimerRemaining,
+    sleepTimerTracksRemaining,
     onOpenSleepTimer,
     profile,
     onOpenProfile
@@ -258,9 +260,10 @@ export default function Sidebar({
             </div>
 
             {/* Active Sleep Timer Indicator */}
-            {sleepTimerRemaining !== null && (
+            {(sleepTimerRemaining !== null || sleepTimerTracksRemaining !== null) && (
                 <button
                     onClick={onOpenSleepTimer}
+                    title="Click to cancel sleep timer"
                     style={{
                         margin: "10px 4px",
                         padding: "8px 12px",
@@ -280,7 +283,11 @@ export default function Sidebar({
                         <circle cx="12" cy="12" r="10"></circle>
                         <polyline points="12 6 12 12 16 14"></polyline>
                     </svg>
-                    <span>Sleep: {formatTimer(sleepTimerRemaining)}</span>
+                    <span>
+                        {sleepTimerTracksRemaining !== null
+                            ? `Sleep: ${sleepTimerTracksRemaining} ${sleepTimerTracksRemaining === 1 ? "track" : "tracks"}`
+                            : `Sleep: ${formatTimer(sleepTimerRemaining || 0)}`}
+                    </span>
                 </button>
             )}
 

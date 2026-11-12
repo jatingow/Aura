@@ -24,7 +24,9 @@ interface PlayerDockProps {
     toggleFavorite: () => void;
     handleShowInExplorer?: () => void;
     sleepTimerRemaining: number | null;
+    sleepTimerTracksRemaining: number | null;
     setSleepTimer: (minutes: number | null) => void;
+    setSleepTimerTracks: (tracks: number | null) => void;
     showLyrics?: boolean;
     toggleLyrics?: () => void;
     isFullScreen?: boolean;
@@ -51,7 +53,9 @@ export default function PlayerDock({
     toggleFavorite,
     handleShowInExplorer,
     sleepTimerRemaining,
+    sleepTimerTracksRemaining,
     setSleepTimer,
+    setSleepTimerTracks,
     showLyrics = false,
     toggleLyrics,
     isFullScreen = false,
@@ -63,7 +67,9 @@ export default function PlayerDock({
         holdUntil: 0
     });
     const [showSleepMenu, setShowSleepMenu] = useState(false);
+    const [sleepTimerTab, setSleepTimerTab] = useState<"time" | "tracks">("time");
     const [customMinutes, setCustomMinutes] = useState("");
+    const [customTracks, setCustomTracks] = useState("");
 
     const duration = currentTrack?.duration || 0;
     const currentProgress = (scrubDisplay.isScrubbing || Date.now() < scrubDisplay.holdUntil)
@@ -267,14 +273,20 @@ export default function PlayerDock({
                 <div style={{ position: "relative" }}>
                     <button
                         onClick={() => setShowSleepMenu(!showSleepMenu)}
-                        title={sleepTimerRemaining ? `Sleep Timer: ${formatTimer(sleepTimerRemaining)} remaining` : "Set Sleep Timer"}
+                        title={
+                            sleepTimerTracksRemaining !== null
+                                ? `Sleep Timer: ${sleepTimerTracksRemaining} ${sleepTimerTracksRemaining === 1 ? "track" : "tracks"} remaining`
+                                : sleepTimerRemaining !== null
+                                    ? `Sleep Timer: ${formatTimer(sleepTimerRemaining)} remaining`
+                                    : "Set Sleep Timer"
+                        }
                         className="icon-btn"
                         style={{
                             padding: "6px 10px",
                             borderRadius: "16px",
-                            backgroundColor: sleepTimerRemaining ? "var(--primary-soft)" : "transparent",
-                            color: sleepTimerRemaining ? "var(--primary)" : "var(--text-muted)",
-                            border: sleepTimerRemaining ? "1px solid var(--border)" : "1px solid transparent",
+                            backgroundColor: (sleepTimerRemaining !== null || sleepTimerTracksRemaining !== null) ? "var(--primary-soft)" : "transparent",
+                            color: (sleepTimerRemaining !== null || sleepTimerTracksRemaining !== null) ? "var(--primary)" : "var(--text-muted)",
+                            border: (sleepTimerRemaining !== null || sleepTimerTracksRemaining !== null) ? "1px solid var(--border)" : "1px solid transparent",
                             fontSize: "0.75rem",
                             display: "flex",
                             alignItems: "center",
@@ -286,7 +298,11 @@ export default function PlayerDock({
                             <circle cx="12" cy="12" r="10"></circle>
                             <polyline points="12 6 12 12 16 14"></polyline>
                         </svg>
-                        {sleepTimerRemaining && <span>{formatTimer(sleepTimerRemaining)}</span>}
+                        {sleepTimerTracksRemaining !== null ? (
+                            <span>{sleepTimerTracksRemaining} {sleepTimerTracksRemaining === 1 ? "track" : "tracks"}</span>
+                        ) : sleepTimerRemaining !== null ? (
+                            <span>{formatTimer(sleepTimerRemaining)}</span>
+                        ) : null}
                     </button>
 
                     {/* Sleep Timer Dropdown Popover */}
@@ -297,96 +313,239 @@ export default function PlayerDock({
                                 position: "absolute",
                                 bottom: "46px",
                                 right: 0,
-                                width: "200px",
+                                width: "220px",
                                 padding: "12px",
                                 borderRadius: "16px",
                                 backgroundColor: "var(--surface-solid)",
                                 boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
                                 display: "flex",
                                 flexDirection: "column",
-                                gap: "6px",
+                                gap: "8px",
                                 zIndex: 1000,
                                 border: "1px solid var(--border)"
                             }}
                         >
-                            <span style={{ fontSize: "0.75rem", fontWeight: "700", color: "var(--text-muted)", padding: "2px 4px" }}>
-                                Sleep Timer
-                            </span>
-
-                            {/* Preset Buttons Grid */}
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
-                                {[15, 30, 45, 60].map(mins => (
-                                    <button
-                                        key={mins}
-                                        onClick={() => {
-                                            setSleepTimer(mins);
-                                            setShowSleepMenu(false);
-                                        }}
-                                        style={{
-                                            padding: "6px 8px",
-                                            borderRadius: "8px",
-                                            textAlign: "center",
-                                            fontSize: "0.8rem",
-                                            color: "var(--text-dark)",
-                                            backgroundColor: "var(--surface)",
-                                            border: "1px solid var(--border)",
-                                            cursor: "pointer"
-                                        }}
-                                        onMouseOver={e => e.currentTarget.style.backgroundColor = "var(--surface-hover)"}
-                                        onMouseOut={e => e.currentTarget.style.backgroundColor = "var(--surface)"}
-                                    >
-                                        {mins}m
-                                    </button>
-                                ))}
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <span style={{ fontSize: "0.78rem", fontWeight: "700", color: "var(--text-dark)", padding: "0 2px" }}>
+                                    Sleep Timer
+                                </span>
+                                {(sleepTimerRemaining !== null || sleepTimerTracksRemaining !== null) && (
+                                    <span style={{ fontSize: "0.68rem", color: "var(--primary)", fontWeight: "600" }}>
+                                        Active
+                                    </span>
+                                )}
                             </div>
 
-                            {/* Custom Minutes Input */}
-                            <div style={{ display: "flex", gap: "6px", marginTop: "4px" }}>
-                                <input
-                                    type="number"
-                                    min="1"
-                                    max="720"
-                                    placeholder="Custom mins"
-                                    value={customMinutes}
-                                    onChange={e => setCustomMinutes(e.target.value)}
+                            {/* Mode Toggle Tabs (Time vs Tracks) */}
+                            <div style={{
+                                display: "flex",
+                                backgroundColor: "var(--surface)",
+                                borderRadius: "8px",
+                                padding: "2px",
+                                border: "1px solid var(--border)"
+                            }}>
+                                <button
+                                    onClick={() => setSleepTimerTab("time")}
                                     style={{
                                         flex: 1,
-                                        padding: "6px 8px",
-                                        borderRadius: "8px",
-                                        backgroundColor: "var(--surface)",
-                                        color: "var(--text-dark)",
-                                        border: "1px solid var(--border)",
-                                        fontSize: "0.78rem",
-                                        outline: "none"
-                                    }}
-                                />
-                                <button
-                                    onClick={() => {
-                                        const mins = parseInt(customMinutes);
-                                        if (mins > 0) {
-                                            setSleepTimer(mins);
-                                            setCustomMinutes("");
-                                            setShowSleepMenu(false);
-                                        }
-                                    }}
-                                    style={{
-                                        padding: "6px 10px",
-                                        borderRadius: "8px",
-                                        backgroundColor: "var(--primary)",
-                                        color: "#0c0f14",
+                                        padding: "4px 8px",
+                                        fontSize: "0.72rem",
                                         fontWeight: "700",
-                                        fontSize: "0.78rem",
-                                        cursor: "pointer"
+                                        borderRadius: "6px",
+                                        backgroundColor: sleepTimerTab === "time" ? "var(--primary)" : "transparent",
+                                        color: sleepTimerTab === "time" ? "#0c0f14" : "var(--text-muted)",
+                                        border: "none",
+                                        cursor: "pointer",
+                                        transition: "all 0.15s ease"
                                     }}
                                 >
-                                    Set
+                                    ⏱ Minutes
+                                </button>
+                                <button
+                                    onClick={() => setSleepTimerTab("tracks")}
+                                    style={{
+                                        flex: 1,
+                                        padding: "4px 8px",
+                                        fontSize: "0.72rem",
+                                        fontWeight: "700",
+                                        borderRadius: "6px",
+                                        backgroundColor: sleepTimerTab === "tracks" ? "var(--primary)" : "transparent",
+                                        color: sleepTimerTab === "tracks" ? "#0c0f14" : "var(--text-muted)",
+                                        border: "none",
+                                        cursor: "pointer",
+                                        transition: "all 0.15s ease"
+                                    }}
+                                >
+                                    🎵 Tracks
                                 </button>
                             </div>
 
-                            {sleepTimerRemaining && (
+                            {/* TAB 1: Minute Presets */}
+                            {sleepTimerTab === "time" ? (
+                                <>
+                                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
+                                        {[15, 30, 45, 60].map(mins => (
+                                            <button
+                                                key={mins}
+                                                onClick={() => {
+                                                    setSleepTimer(mins);
+                                                    setShowSleepMenu(false);
+                                                }}
+                                                style={{
+                                                    padding: "6px 8px",
+                                                    borderRadius: "8px",
+                                                    textAlign: "center",
+                                                    fontSize: "0.8rem",
+                                                    color: "var(--text-dark)",
+                                                    backgroundColor: "var(--surface)",
+                                                    border: "1px solid var(--border)",
+                                                    cursor: "pointer"
+                                                }}
+                                                onMouseOver={e => e.currentTarget.style.backgroundColor = "var(--surface-hover)"}
+                                                onMouseOut={e => e.currentTarget.style.backgroundColor = "var(--surface)"}
+                                            >
+                                                {mins}m
+                                            </button>
+                                        ))}
+                                    </div>
+
+                                    {/* Custom Minutes Input */}
+                                    <div style={{ display: "flex", gap: "6px", marginTop: "2px" }}>
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            max="720"
+                                            placeholder="Custom mins"
+                                            value={customMinutes}
+                                            onChange={e => setCustomMinutes(e.target.value)}
+                                            style={{
+                                                flex: 1,
+                                                padding: "6px 8px",
+                                                borderRadius: "8px",
+                                                backgroundColor: "var(--surface)",
+                                                color: "var(--text-dark)",
+                                                border: "1px solid var(--border)",
+                                                fontSize: "0.78rem",
+                                                outline: "none"
+                                            }}
+                                        />
+                                        <button
+                                            onClick={() => {
+                                                const mins = parseInt(customMinutes);
+                                                if (mins > 0) {
+                                                    setSleepTimer(mins);
+                                                    setCustomMinutes("");
+                                                    setShowSleepMenu(false);
+                                                }
+                                            }}
+                                            style={{
+                                                padding: "6px 10px",
+                                                borderRadius: "8px",
+                                                backgroundColor: "var(--primary)",
+                                                color: "#0c0f14",
+                                                fontWeight: "700",
+                                                fontSize: "0.78rem",
+                                                cursor: "pointer",
+                                                border: "none"
+                                            }}
+                                        >
+                                            Set
+                                        </button>
+                                    </div>
+                                </>
+                            ) : (
+                                /* TAB 2: Stop After N Tracks Presets */
+                                <>
+                                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
+                                        {[
+                                            { count: 1, label: "1 (This song)" },
+                                            { count: 2, label: "2 Tracks" },
+                                            { count: 3, label: "3 Tracks" },
+                                            { count: 5, label: "5 Tracks" }
+                                        ].map(item => (
+                                            <button
+                                                key={item.count}
+                                                onClick={() => {
+                                                    setSleepTimerTracks(item.count);
+                                                    setShowSleepMenu(false);
+                                                }}
+                                                style={{
+                                                    padding: "6px 6px",
+                                                    borderRadius: "8px",
+                                                    textAlign: "center",
+                                                    fontSize: "0.75rem",
+                                                    fontWeight: "600",
+                                                    color: "var(--text-dark)",
+                                                    backgroundColor: "var(--surface)",
+                                                    border: "1px solid var(--border)",
+                                                    cursor: "pointer",
+                                                    whiteSpace: "nowrap",
+                                                    overflow: "hidden",
+                                                    textOverflow: "ellipsis"
+                                                }}
+                                                onMouseOver={e => e.currentTarget.style.backgroundColor = "var(--surface-hover)"}
+                                                onMouseOut={e => e.currentTarget.style.backgroundColor = "var(--surface)"}
+                                            >
+                                                {item.label}
+                                            </button>
+                                        ))}
+                                    </div>
+
+                                    {/* Custom Tracks Input */}
+                                    <div style={{ display: "flex", gap: "6px", marginTop: "2px" }}>
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            max="99"
+                                            placeholder="Custom tracks"
+                                            value={customTracks}
+                                            onChange={e => setCustomTracks(e.target.value)}
+                                            style={{
+                                                flex: 1,
+                                                padding: "6px 8px",
+                                                borderRadius: "8px",
+                                                backgroundColor: "var(--surface)",
+                                                color: "var(--text-dark)",
+                                                border: "1px solid var(--border)",
+                                                fontSize: "0.78rem",
+                                                outline: "none"
+                                            }}
+                                        />
+                                        <button
+                                            onClick={() => {
+                                                const count = parseInt(customTracks);
+                                                if (count > 0) {
+                                                    setSleepTimerTracks(count);
+                                                    setCustomTracks("");
+                                                    setShowSleepMenu(false);
+                                                }
+                                            }}
+                                            style={{
+                                                padding: "6px 10px",
+                                                borderRadius: "8px",
+                                                backgroundColor: "var(--primary)",
+                                                color: "#0c0f14",
+                                                fontWeight: "700",
+                                                fontSize: "0.78rem",
+                                                cursor: "pointer",
+                                                border: "none"
+                                            }}
+                                        >
+                                            Set
+                                        </button>
+                                    </div>
+                                    <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", opacity: 0.8, lineHeight: 1.3 }}>
+                                        Current song counts as 1. Stops when songs end naturally.
+                                    </span>
+                                </>
+                            )}
+
+                            {/* Cancel / Reset Button */}
+                            {(sleepTimerRemaining !== null || sleepTimerTracksRemaining !== null) && (
                                 <button
                                     onClick={() => {
                                         setSleepTimer(null);
+                                        setSleepTimerTracks(null);
                                         setShowSleepMenu(false);
                                     }}
                                     style={{
@@ -394,13 +553,16 @@ export default function PlayerDock({
                                         borderRadius: "8px",
                                         textAlign: "center",
                                         fontSize: "0.78rem",
+                                        fontWeight: "600",
                                         color: "#ef4444",
                                         cursor: "pointer",
                                         borderTop: "1px solid var(--border)",
+                                        backgroundColor: "transparent",
+                                        border: "none",
                                         marginTop: "4px"
                                     }}
                                 >
-                                    Turn off timer
+                                    Cancel sleep timer
                                 </button>
                             )}
                         </div>
