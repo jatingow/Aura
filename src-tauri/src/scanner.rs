@@ -79,30 +79,73 @@ pub fn scan_directory(path: &str) -> Result<Vec<TrackInfo>, String> {
     Ok(tracks)
 }
 
+fn encode_optimized_image(raw_bytes: &[u8]) -> Option<String> {
+    const MAX_DIMENSION: u32 = 720;
+    const MAX_DIRECT_BYTES: usize = 350 * 1024; // 350 KB
+
+    if raw_bytes.is_empty() {
+        return None;
+    }
+
+    // Direct path for already-small images to minimize latency
+    if raw_bytes.len() <= MAX_DIRECT_BYTES {
+        let mime = if raw_bytes.starts_with(&[0x89, 0x50, 0x4E, 0x47]) {
+            "image/png"
+        } else if raw_bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+            "image/jpeg"
+        } else if raw_bytes.starts_with(b"RIFF") && raw_bytes.len() > 12 && &raw_bytes[8..12] == b"WEBP" {
+            "image/webp"
+        } else {
+            "image/jpeg"
+        };
+        let b64 = general_purpose::STANDARD.encode(raw_bytes);
+        return Some(format!("data:{};base64,{}", mime, b64));
+    }
+
+    // Large image optimization: downscale to maximum 720x720 and compress as JPEG
+    if let Ok(img) = image::load_from_memory(raw_bytes) {
+        let (width, height) = (img.width(), img.height());
+        let resized = if width > MAX_DIMENSION || height > MAX_DIMENSION {
+            img.resize(MAX_DIMENSION, MAX_DIMENSION, image::imageops::FilterType::Triangle)
+        } else {
+            img
+        };
+
+        let mut output = std::io::Cursor::new(Vec::new());
+        let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut output, 85);
+        if encoder.encode_image(&resized).is_ok() {
+            let optimized_bytes = output.into_inner();
+            let b64 = general_purpose::STANDARD.encode(&optimized_bytes);
+            return Some(format!("data:image/jpeg;base64,{}", b64));
+        }
+    }
+
+    // Fallback if decoding failed
+    let b64 = general_purpose::STANDARD.encode(raw_bytes);
+    Some(format!("data:image/jpeg;base64,{}", b64))
+}
+
 #[tauri::command]
 pub fn get_album_art(path: &str) -> Option<String> {
     let file_path = std::path::Path::new(path);
 
     // 1. Attempt to open and read embedded picture from metadata
     if let Ok(tagged_file) = Probe::open(file_path).and_then(|p| p.read()) {
-        let tag = tagged_file
-            .primary_tag()
-            .or_else(|| tagged_file.first_tag());
-
-        if let Some(tag) = tag {
-            // Grab the first picture attached to the metadata
+        // Check primary tag first
+        if let Some(tag) = tagged_file.primary_tag() {
             if let Some(picture) = tag.pictures().first() {
-                // Determine the mime type (usually image/jpeg or image/png)
-                let mime_type = picture
-                    .mime_type()
-                    .unwrap_or(&lofty::picture::MimeType::Jpeg)
-                    .as_str();
+                if let Some(art) = encode_optimized_image(picture.data()) {
+                    return Some(art);
+                }
+            }
+        }
 
-                // Encode the raw bytes into a Base64 string
-                let base64_str = general_purpose::STANDARD.encode(picture.data());
-
-                // Format it perfectly for a React <img src="..."> tag
-                return Some(format!("data:{};base64,{}", mime_type, base64_str));
+        // Iterate over all tags (ID3v2, Vorbis, MP4, etc.) to catch secondary/extended pictures
+        for tag in tagged_file.tags() {
+            if let Some(picture) = tag.pictures().first() {
+                if let Some(art) = encode_optimized_image(picture.data()) {
+                    return Some(art);
+                }
             }
         }
     }
@@ -110,19 +153,40 @@ pub fn get_album_art(path: &str) -> Option<String> {
     // 2. Check for local folder cover image (cover.jpg, folder.jpg, album.jpg, etc.)
     if let Some(parent) = file_path.parent() {
         let cover_names = [
-            "cover.jpg", "cover.png", "cover.jpeg",
-            "folder.jpg", "folder.png", "folder.jpeg",
-            "front.jpg", "front.png", "front.jpeg",
-            "album.jpg", "album.png", "album.jpeg"
+            "cover.jpg", "cover.png", "cover.jpeg", "cover.webp",
+            "folder.jpg", "folder.png", "folder.jpeg", "folder.webp",
+            "front.jpg", "front.png", "front.jpeg", "front.webp",
+            "album.jpg", "album.png", "album.jpeg", "album.webp",
+            "albumart.jpg", "albumartsmall.jpg"
         ];
+
+        // Direct candidate lookup
         for name in &cover_names {
             let candidate = parent.join(name);
             if candidate.is_file() {
                 if let Ok(bytes) = std::fs::read(&candidate) {
-                    let ext = candidate.extension().and_then(|s| s.to_str()).unwrap_or("jpeg");
-                    let mime = if ext.eq_ignore_ascii_case("png") { "image/png" } else { "image/jpeg" };
-                    let base64_str = general_purpose::STANDARD.encode(&bytes);
-                    return Some(format!("data:{};base64,{}", mime, base64_str));
+                    if let Some(art) = encode_optimized_image(&bytes) {
+                        return Some(art);
+                    }
+                }
+            }
+        }
+
+        // Case-insensitive directory scan fallback
+        if let Ok(entries) = std::fs::read_dir(parent) {
+            for entry in entries.filter_map(|e| e.ok()) {
+                let p = entry.path();
+                if p.is_file() {
+                    if let Some(file_name) = p.file_name().and_then(|s| s.to_str()) {
+                        let lower_name = file_name.to_lowercase();
+                        if cover_names.iter().any(|c| c.eq_ignore_ascii_case(&lower_name)) {
+                            if let Ok(bytes) = std::fs::read(&p) {
+                                if let Some(art) = encode_optimized_image(&bytes) {
+                                    return Some(art);
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

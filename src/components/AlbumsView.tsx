@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Track } from "../types";
-import { getAlbumArtCached } from "../utils";
+import { getAlbumArtCached, getAlbumArtSynchronous } from "../utils";
+import Artwork from "./Artwork";
 
 interface AlbumsViewProps {
     tracks: Track[];
@@ -10,14 +11,22 @@ interface AlbumsViewProps {
 export default function AlbumsView({ tracks, handlePlayTrack }: AlbumsViewProps) {
     const [albumArt, setAlbumArt] = useState<Record<string, string>>({});
 
+    // Group tracks by Artist + Album so identical album titles by different artists remain distinct
     const albumMap = tracks.reduce((acc, t) => {
+        const artistName = t.artist || "Unknown Artist";
         const albumName = t.album || "Unknown Album";
-        if (!acc[albumName]) {
-            acc[albumName] = { tracks: [], artist: t.artist, sampleTrack: t };
+        const key = `${artistName} - ${albumName}`.toLowerCase();
+        if (!acc[key]) {
+            acc[key] = {
+                albumTitle: albumName,
+                artist: artistName,
+                tracks: [],
+                sampleTrack: t
+            };
         }
-        acc[albumName].tracks.push(t);
+        acc[key].tracks.push(t);
         return acc;
-    }, {} as Record<string, { tracks: Track[]; artist: string; sampleTrack: Track }>);
+    }, {} as Record<string, { albumTitle: string; artist: string; tracks: Track[]; sampleTrack: Track }>);
 
     const albumList = Object.entries(albumMap);
 
@@ -25,16 +34,34 @@ export default function AlbumsView({ tracks, handlePlayTrack }: AlbumsViewProps)
         let isMounted = true;
         async function loadArt() {
             const loaded: Record<string, string> = {};
-            for (const [name, data] of albumList.slice(0, 30)) {
-                if (!albumArt[name]) {
-                    const art = await getAlbumArtCached(data.sampleTrack.path);
-                    if (art) loaded[name] = art;
+            const fetchPromises: Promise<void>[] = [];
+
+            for (const [key, data] of albumList.slice(0, 40)) {
+                if (!albumArt[key]) {
+                    const syncHit = getAlbumArtSynchronous(data.sampleTrack.path);
+                    if (syncHit !== undefined) {
+                        if (syncHit) loaded[key] = syncHit;
+                    } else {
+                        fetchPromises.push(
+                            getAlbumArtCached(data.sampleTrack.path).then(art => {
+                                if (art && isMounted) {
+                                    setAlbumArt(prev => ({ ...prev, [key]: art }));
+                                }
+                            })
+                        );
+                    }
                 }
             }
+
             if (isMounted && Object.keys(loaded).length > 0) {
                 setAlbumArt(prev => ({ ...prev, ...loaded }));
             }
+
+            if (fetchPromises.length > 0) {
+                await Promise.all(fetchPromises);
+            }
         }
+
         if (albumList.length > 0) void loadArt();
         return () => { isMounted = false; };
     }, [tracks]);
@@ -64,11 +91,11 @@ export default function AlbumsView({ tracks, handlePlayTrack }: AlbumsViewProps)
                 gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
                 gap: "20px"
             }}>
-                {albumList.map(([name, data]) => {
-                    const art = albumArt[name];
+                {albumList.map(([key, data]) => {
+                    const art = albumArt[key];
                     return (
                         <div
-                            key={name}
+                            key={key}
                             onClick={() => handlePlayTrack(data.sampleTrack)}
                             className="glass-card"
                             style={{
@@ -86,19 +113,17 @@ export default function AlbumsView({ tracks, handlePlayTrack }: AlbumsViewProps)
                                 marginBottom: "10px",
                                 boxShadow: "0 8px 24px rgba(0,0,0,0.18)"
                             }}>
-                                {art ? (
-                                    <img src={art} alt={name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                                ) : (
-                                    <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)" }}>
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="40" height="40" style={{ opacity: 0.5 }}>
-                                            <circle cx="12" cy="12" r="10"></circle>
-                                            <circle cx="12" cy="12" r="3"></circle>
-                                        </svg>
-                                    </div>
-                                )}
+                                <Artwork
+                                    src={art || null}
+                                    alt={data.albumTitle}
+                                    width="100%"
+                                    height="100%"
+                                    borderRadius={14}
+                                    iconSize={40}
+                                />
                             </div>
                             <strong style={{ display: "block", fontSize: "0.9rem", color: "var(--text-dark)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                                {name}
+                                {data.albumTitle}
                             </strong>
                             <span style={{ fontSize: "0.76rem", color: "var(--text-muted)", marginTop: "2px", display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                                 {data.artist} · {data.tracks.length} tracks

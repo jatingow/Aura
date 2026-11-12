@@ -3,6 +3,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { Track, SongLyrics } from "../types";
 import { formatTime } from "../utils";
 import { getTrackLyrics, importLyricsForTrack } from "../lyricsService";
+import Artwork from "./Artwork";
 
 interface LyricsViewProps {
     currentTrack: Track | null;
@@ -481,27 +482,15 @@ export default function LyricsView({
 
                 {/* Mini track info row */}
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                    <div style={{
-                        width: "36px",
-                        height: "36px",
-                        borderRadius: "8px",
-                        overflow: "hidden",
-                        backgroundColor: "var(--surface-solid)",
-                        flexShrink: 0,
-                        border: "1px solid var(--border)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center"
-                    }}>
-                        {currentAlbumArt ? (
-                            <img src={currentAlbumArt} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                        ) : (
-                            <svg viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="1.5" width="18" height="18">
-                                <circle cx="12" cy="12" r="10"></circle>
-                                <circle cx="12" cy="12" r="3"></circle>
-                            </svg>
-                        )}
-                    </div>
+                    <Artwork
+                        src={currentAlbumArt}
+                        alt={currentTrack?.title || ""}
+                        width={36}
+                        height={36}
+                        borderRadius={8}
+                        iconSize={16}
+                        style={{ flexShrink: 0, border: "1px solid var(--border)" }}
+                    />
                     <div style={{ overflow: "hidden", flex: 1, minWidth: 0 }}>
                         <div style={{
                             fontSize: "0.82rem",

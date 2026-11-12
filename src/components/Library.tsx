@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Track, theme } from "../types";
-import { formatTime, getAlbumArtCached } from "../utils";
+import { formatTime, getAlbumArtCached, getAlbumArtSynchronous } from "../utils";
+import Artwork from "./Artwork";
 
 interface LibraryProps {
     tracks: Track[];
@@ -53,20 +54,38 @@ export default function Library({
         sortedTracks.reverse();
     }
 
-    // Lazy load art only for visible items (first 50)
+    // Lazy load art for visible items (first 50) efficiently in parallel
     useEffect(() => {
         let isMounted = true;
         async function loadVisible() {
             const slice = sortedTracks.slice(0, 50);
             const newArt: Record<string, string> = {};
+            const fetchPromises: Promise<void>[] = [];
+
             for (const t of slice) {
-                if (!albumArtCache[t.path]) {
-                    const art = await getAlbumArtCached(t.path);
-                    if (art) newArt[t.path] = art;
+                const normPath = t.path.toLowerCase();
+                if (albumArtCache[normPath] === undefined) {
+                    const syncHit = getAlbumArtSynchronous(t.path);
+                    if (syncHit !== undefined) {
+                        if (syncHit) newArt[normPath] = syncHit;
+                    } else {
+                        fetchPromises.push(
+                            getAlbumArtCached(t.path).then(art => {
+                                if (art && isMounted) {
+                                    setAlbumArtCache(prev => ({ ...prev, [normPath]: art }));
+                                }
+                            })
+                        );
+                    }
                 }
             }
+
             if (isMounted && Object.keys(newArt).length > 0) {
                 setAlbumArtCache(prev => ({ ...prev, ...newArt }));
+            }
+
+            if (fetchPromises.length > 0) {
+                await Promise.all(fetchPromises);
             }
         }
         if (sortedTracks.length > 0) {
@@ -186,7 +205,6 @@ export default function Library({
                     {sortedTracks.map((track, idx) => {
                         const isCurrent = currentTrack?.path === track.path;
                         const isFav = favorites.includes(track.path);
-                        const art = albumArtCache[track.path];
 
                         return (
                             <div
@@ -199,17 +217,15 @@ export default function Library({
                                     {String(idx + 1).padStart(2, "0")}
                                 </span>
 
-                                <div style={{ width: "38px", height: "38px", borderRadius: "10px", overflow: "hidden", backgroundColor: "var(--surface-solid)", marginRight: "14px", flexShrink: 0 }}>
-                                    {art ? (
-                                        <img src={art} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                                    ) : (
-                                        <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)" }}>
-                                            <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style={{ opacity: 0.5 }}>
-                                                <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
-                                            </svg>
-                                        </div>
-                                    )}
-                                </div>
+                                <Artwork
+                                    src={albumArtCache[track.path.toLowerCase()] || null}
+                                    alt={track.title}
+                                    width={38}
+                                    height={38}
+                                    borderRadius={10}
+                                    iconSize={18}
+                                    style={{ marginRight: "14px", flexShrink: 0 }}
+                                />
 
                                 <div style={{ flex: 1.5, minWidth: 0 }}>
                                     <div style={{ fontSize: "0.88rem", fontWeight: "600", color: isCurrent ? "var(--primary)" : "var(--text-dark)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -270,7 +286,6 @@ export default function Library({
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "16px", paddingBottom: "24px" }}>
                     {sortedTracks.map(track => {
                         const isCurrent = currentTrack?.path === track.path;
-                        const art = albumArtCache[track.path];
                         return (
                             <div
                                 key={track.path}
@@ -284,15 +299,14 @@ export default function Library({
                                 }}
                             >
                                 <div style={{ width: "100%", aspectRatio: "1", borderRadius: "12px", overflow: "hidden", backgroundColor: "var(--surface-solid)", marginBottom: "8px" }}>
-                                    {art ? (
-                                        <img src={art} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                                    ) : (
-                                        <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)" }}>
-                                            <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style={{ opacity: 0.5 }}>
-                                                <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
-                                            </svg>
-                                        </div>
-                                    )}
+                                    <Artwork
+                                        src={albumArtCache[track.path.toLowerCase()] || null}
+                                        alt={track.title}
+                                        width="100%"
+                                        height="100%"
+                                        borderRadius={12}
+                                        iconSize={32}
+                                    />
                                 </div>
                                 <div style={{ fontSize: "0.85rem", fontWeight: "700", color: isCurrent ? "var(--primary)" : "var(--text-dark)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                                     {track.title}

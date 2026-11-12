@@ -14,33 +14,69 @@ export function formatCount(count: number): string {
     return count.toString();
 }
 
-// Global in-memory cache for album artwork to prevent repeated disk/IPC hits
-const artMemoryCache = new Map<string, string>();
+// Global in-memory bounded LRU cache for album artwork (supports positive and negative caching)
+const MAX_ART_CACHE_ENTRIES = 250;
+const artMemoryCache = new Map<string, string | null>();
 const inFlightRequests = new Map<string, Promise<string | null>>();
 
+function normalizePathKey(path: string): string {
+    return path.trim().replace(/\\/g, "/").toLowerCase();
+}
+
+/**
+ * Synchronous lookup in the artwork memory cache.
+ * Returns:
+ * - `string`: Base64 artwork data URI if cached
+ * - `null`: Track is confirmed to have no artwork (negative cache hit)
+ * - `undefined`: Track artwork has not been probed yet
+ */
+export function getAlbumArtSynchronous(path: string): string | null | undefined {
+    if (!path) return null;
+    const key = normalizePathKey(path);
+    return artMemoryCache.get(key);
+}
+
+/**
+ * Asynchronously fetch and cache album artwork.
+ * Caches both positive hits and negative hits (null) to avoid repeated disk reads.
+ * Deduplicates in-flight IPC requests.
+ */
 export async function getAlbumArtCached(path: string): Promise<string | null> {
     if (!path) return null;
-    if (artMemoryCache.has(path)) {
-        return artMemoryCache.get(path)!;
+    const key = normalizePathKey(path);
+
+    if (artMemoryCache.has(key)) {
+        return artMemoryCache.get(key)!;
     }
-    if (inFlightRequests.has(path)) {
-        return inFlightRequests.get(path)!;
+
+    if (inFlightRequests.has(key)) {
+        return inFlightRequests.get(key)!;
     }
 
     const fetchPromise = invoke<string | null>("get_album_art", { path })
         .then(art => {
-            if (art) {
-                artMemoryCache.set(path, art);
+            // Store both positive and negative (null) results
+            if (artMemoryCache.size >= MAX_ART_CACHE_ENTRIES) {
+                // Evict oldest entry (LRU)
+                const oldestKey = artMemoryCache.keys().next().value;
+                if (oldestKey) artMemoryCache.delete(oldestKey);
             }
-            inFlightRequests.delete(path);
-            return art;
+            artMemoryCache.set(key, art ?? null);
+            inFlightRequests.delete(key);
+            return art ?? null;
         })
         .catch(err => {
             console.warn("Album art load error:", err);
-            inFlightRequests.delete(path);
+            artMemoryCache.set(key, null);
+            inFlightRequests.delete(key);
             return null;
         });
 
-    inFlightRequests.set(path, fetchPromise);
+    inFlightRequests.set(key, fetchPromise);
     return fetchPromise;
+}
+
+export function clearArtworkCache(): void {
+    artMemoryCache.clear();
+    inFlightRequests.clear();
 }

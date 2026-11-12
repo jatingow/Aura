@@ -1,6 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Track } from "../types";
 import { formatTime } from "../utils";
+import Seekbar from "./Seekbar";
+import Artwork from "./Artwork";
 
 interface PlayerDockProps {
     currentTrack: Track | null;
@@ -55,30 +57,18 @@ export default function PlayerDock({
     isFullScreen = false,
     toggleFullScreen
 }: PlayerDockProps) {
-    const [isScrubbing, setIsScrubbing] = useState(false);
-    const [scrubValue, setScrubValue] = useState(0);
+    const [scrubDisplay, setScrubDisplay] = useState<{ isScrubbing: boolean; value: number; holdUntil: number }>({
+        isScrubbing: false,
+        value: 0,
+        holdUntil: 0
+    });
     const [showSleepMenu, setShowSleepMenu] = useState(false);
     const [customMinutes, setCustomMinutes] = useState("");
 
     const duration = currentTrack?.duration || 0;
-    const currentProgress = isScrubbing ? scrubValue : progress;
-    const progressPercent = duration > 0 ? Math.min(100, Math.max(0, (currentProgress / duration) * 100)) : 0;
-
-    useEffect(() => {
-        if (!isScrubbing) {
-            setScrubValue(progress);
-        }
-    }, [progress, isScrubbing]);
-
-    const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const val = parseFloat(e.target.value);
-        setScrubValue(val);
-    };
-
-    const handleSliderCommit = () => {
-        setIsScrubbing(false);
-        handleSeek(scrubValue);
-    };
+    const currentProgress = (scrubDisplay.isScrubbing || Date.now() < scrubDisplay.holdUntil)
+        ? scrubDisplay.value
+        : progress;
 
     const formatTimer = (secs: number) => {
         const m = Math.floor(secs / 60);
@@ -101,28 +91,15 @@ export default function PlayerDock({
         }}>
             {/* --- LEFT: TRACK INFO & COVER ART --- */}
             <div style={{ display: "flex", alignItems: "center", gap: "14px", width: "280px", minWidth: 0 }}>
-                <div style={{
-                    width: "52px",
-                    height: "52px",
-                    borderRadius: "12px",
-                    overflow: "hidden",
-                    backgroundColor: "var(--surface-solid)",
-                    flexShrink: 0,
-                    boxShadow: "0 6px 16px rgba(0,0,0,0.22)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center"
-                }}>
-                    {albumArt ? (
-                        <img src={albumArt} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                    ) : (
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="24" height="24" style={{ opacity: 0.5 }}>
-                            <path d="M9 18V5l12-2v13"></path>
-                            <circle cx="6" cy="18" r="3"></circle>
-                            <circle cx="18" cy="16" r="3"></circle>
-                        </svg>
-                    )}
-                </div>
+                <Artwork
+                    src={albumArt}
+                    alt={currentTrack?.title || "Album Art"}
+                    width={52}
+                    height={52}
+                    borderRadius={12}
+                    style={{ boxShadow: "0 6px 16px rgba(0,0,0,0.22)" }}
+                    iconSize={22}
+                />
 
                 <div style={{ overflow: "hidden", flex: 1 }}>
                     <div style={{
@@ -267,22 +244,16 @@ export default function PlayerDock({
                     <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontVariantNumeric: "tabular-nums", width: "36px", textAlign: "right" }}>
                         {formatTime(currentProgress)}
                     </span>
-                    <input
-                        type="range"
-                        min={0}
-                        max={duration || 100}
-                        step={0.1}
-                        value={currentProgress}
-                        onMouseDown={() => setIsScrubbing(true)}
-                        onTouchStart={() => setIsScrubbing(true)}
-                        onChange={handleSliderChange}
-                        onMouseUp={handleSliderCommit}
-                        onTouchEnd={handleSliderCommit}
-                        className="scrubber-slider"
-                        style={{
-                            flex: 1,
-                            background: `linear-gradient(to right, var(--primary) ${progressPercent}%, var(--slider-track) ${progressPercent}%)`
-                        }}
+                    <Seekbar
+                        progress={progress}
+                        duration={duration}
+                        onSeek={handleSeek}
+                        disabled={!currentTrack || duration <= 0}
+                        onScrubChange={(isScrubbing, value) => setScrubDisplay({
+                            isScrubbing,
+                            value,
+                            holdUntil: isScrubbing ? Date.now() + 10000 : Date.now() + 1200
+                        })}
                     />
                     <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontVariantNumeric: "tabular-nums", width: "36px" }}>
                         {formatTime(duration)}

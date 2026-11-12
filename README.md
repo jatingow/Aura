@@ -6,17 +6,44 @@ Aura is an ultra-fast, modern, desktop music player engineered with **Tauri v2**
 
 ## 📸 Screenshots
 
-### Dark Mode & Explore Feed
-![Aura Dark Mode](docs/screenshots/s2.png)
+### Primary Views
 
-### Light Mode Experience
-![Aura Light Mode](docs/screenshots/s1.png)
+#### Dark Mode (AMOLED & Slate)
+![Aura Dark Mode](docs/screenshots/darkmode.png)
 
-### Dedicated Player & Controls
-![Aura UI & Player Dock](docs/screenshots/s3.png)
+#### Dark Mode with Lyrics Sidebar
+![Aura Dark Mode with Lyrics](docs/screenshots/darkmodewithlyrcis.png)
 
-### Deep Analytics & Library
-![Aura Analytics & Library](docs/screenshots/s4.png)
+#### Light Mode Experience
+![Aura Light Mode](docs/screenshots/lightmode.png)
+
+#### Genres & Moods View
+![Aura Genres View](docs/screenshots/genre.png)
+
+#### Listening Analytics & Library
+![Aura Analytics & Library](docs/screenshots/analytics.png)
+
+---
+
+### Immersive Fullscreen & 4 Lyrics Modes
+
+Aura features a dedicated borderless fullscreen player (**F11** or fullscreen button) with four distinct visual modes:
+
+#### 1. Artwork Mode
+Full-screen high-resolution album cover presentation with sleek glassmorphic playback controls.
+![Artwork Mode](docs/screenshots/playfullscreen.png)
+
+#### 2. Lyrics on Art Mode
+Synchronized lyrics floating seamlessly over subtly darkened and blurred album artwork.
+![Lyrics on Art Mode](docs/screenshots/lyricsonart.png)
+
+#### 3. Split Mode
+Side-by-side layout pairing a high-resolution vinyl-style album art card with auto-scrolling synced lyrics.
+![Split Mode](docs/screenshots/splitlyrics.png)
+
+#### 4. Fullscreen Lyrics Mode
+Clean, distraction-free full-screen synchronized lyrics view with large typography and glowing active lines.
+![Fullscreen Lyrics Mode](docs/screenshots/fullscreenlyrics.png)
 
 ---
 
@@ -28,11 +55,25 @@ Aura is an ultra-fast, modern, desktop music player engineered with **Tauri v2**
 - **Dedicated Bottom Player Dock**: Wide, comfortable seekbar scrubber with exact timestamps (`01:23` / `03:45`), high-res artwork, interactive heart favorite button, media controls, and volume slider.
 - **Minimalist Explore View**: Home feed is kept clean and clutter-free, displaying purely ranked trending artists and songs (`01`, `02`, `03`...) without distracting play count numbers.
 
+### 🎤 Synchronized Lyrics & Immersive Fullscreen (4 Modes)
+- **Automatic Lyrics Retrieval**: Fetches synchronized LRC lyrics and plain text lyrics from LRCLIB and embedded file tags.
+- **Dedicated Fullscreen Player (`F11`)**: Four custom layouts:
+  - **Artwork Mode**: Full-screen high-res album cover with minimalist floating media controls.
+  - **Lyrics on Art Mode**: Smooth animated lyrics floating over tinted and blurred album artwork.
+  - **Split Mode**: Side-by-side view featuring high-res album artwork and auto-scrolling lyrics.
+  - **Fullscreen Lyrics Mode**: Typography-focused view with active line tracking and glow accents.
+- **Interactive Line Seeking**: Click any lyric line to instantly jump to that point in the track.
+- **Timing Offset Adjustment**: Fine-tune lyric timing in steps of $\pm 100\text{ms}$ or $\pm 500\text{ms}$, persistently saved per track.
+- **In-Lyrics Search & Quick Copy**: Instant keyword search inside lyrics and one-click clipboard copying.
+- **Auto-Scroll & Follow**: Smooth auto-centering with a smart 8-second resume timer when manually scrolling.
+
 ### 🎧 High-Fidelity Audio Engine & Transitions
 - **Non-Blocking Rust Audio Pipeline**: File operations and decoding use `std::io::BufReader` outside mutex locks, completely eliminating UI stutter and audio freezes when switching tracks.
+- **Instant Previous & Next Navigation**: Previous track starts immediately on click with queue, shuffle, and repeat edge-case handling.
+- **Precision Seeking & Scrubber Interaction**: Native `rodio` random-access seeking with automated decoder fallback; eliminates scrubber jitter and snapback.
+- **Intelligent Album Art Engine**: Bounded LRU cache (250 entries), negative caching (`null`), Windows path normalization, and Rust-side image downscaling/compression to prevent memory spikes.
 - **Studio Audio Fade-In & Fade-Out**: Smooth volume crossfade transitions when switching tracks, pausing, and resuming playback. Configurable transition speeds in Settings (*Instant*, *Fast 200ms*, *Smooth 350ms*, *Studio 600ms*).
 - **Smart Playback Fallback**: Clicking Play or Next without a selected track immediately starts playing your library or resumes your last played song.
-- **Robust Next & Previous Logic**: Handles queue orders, shuffle randomization, repeat modes (repeat one, repeat all), and rewinds to 0:00 if clicked after 3 seconds of playtime.
 
 ### ⏱️ Customizable Sleep Timer
 - Bedtime sleep timer accessible right from the bottom player dock.
@@ -141,13 +182,17 @@ Generated binaries will be located in:
 ```text
 Aura/
 ├── docs/
-│   └── screenshots/        # Application screenshots (s1-s4)
+│   └── screenshots/        # Application screenshots & lyrics modes
 ├── src/                    # Frontend React code
 │   ├── components/
 │   │   ├── TitleBar.tsx    # Custom frameless window title bar & controls
 │   │   ├── Sidebar.tsx     # Menu, Library navigation, profile & sleep indicator
 │   │   ├── MainContent.tsx # Explore hero banner, albums carousel & popular tracks
 │   │   ├── PlayerDock.tsx  # Full bottom player bar, wide seekbar & sleep timer
+│   │   ├── FullScreenPlayer.tsx # Immersive fullscreen mode (4 layout styles)
+│   │   ├── LyricsView.tsx  # Synced/plain lyrics panel with search & offset controls
+│   │   ├── Seekbar.tsx     # Precision draggable seekbar scrubber with hold lock
+│   │   ├── Artwork.tsx     # Unified album artwork component with matte fallback
 │   │   ├── GenresView.tsx  # Dedicated genres & mood cards view
 │   │   ├── ArtistsView.tsx # Dedicated artists directory view
 │   │   ├── AlbumsView.tsx  # Dedicated albums directory view
@@ -157,8 +202,9 @@ Aura/
 │   │   ├── Library.tsx     # Full library search, sorting & list/grid view
 │   │   └── ContextMenu.tsx # Right-click track options
 │   ├── App.tsx             # Root orchestrator & audio engine state manager
+│   ├── lyricsService.ts    # LRCLIB API client & local lyrics parser
 │   ├── types.ts            # TypeScript definitions, base palettes & accent colors
-│   ├── utils.ts            # Time formatters & in-memory deduplicated art cache
+│   ├── utils.ts            # Time formatters & bounded LRU artwork cache
 │   └── main.tsx            # Vite DOM renderer
 ├── src-tauri/              # Backend Rust code
 │   ├── src/

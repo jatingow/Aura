@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { Track, SongLyrics } from "../types";
 import { formatTime } from "../utils";
 import { getTrackLyrics } from "../lyricsService";
+import Seekbar from "./Seekbar";
+import Artwork from "./Artwork";
 
 interface FullScreenPlayerProps {
     currentTrack: Track | null;
@@ -99,17 +101,15 @@ export default function FullScreenPlayer({
     }, [isPlaying, showQueueDrawer]);
 
     // Scrubber state
-    const [isScrubbing, setIsScrubbing] = useState(false);
-    const [scrubValue, setScrubValue] = useState(0);
+    const [scrubDisplay, setScrubDisplay] = useState<{ isScrubbing: boolean; value: number; holdUntil: number }>({
+        isScrubbing: false,
+        value: 0,
+        holdUntil: 0
+    });
     const duration = currentTrack?.duration || 0;
-    const currentProgress = isScrubbing ? scrubValue : progress;
-    const progressPercent = duration > 0 ? Math.min(100, Math.max(0, (currentProgress / duration) * 100)) : 0;
-
-    useEffect(() => {
-        if (!isScrubbing) {
-            setScrubValue(progress);
-        }
-    }, [progress, isScrubbing]);
+    const currentProgress = (scrubDisplay.isScrubbing || Date.now() < scrubDisplay.holdUntil)
+        ? scrubDisplay.value
+        : progress;
 
     // Lyrics state
     const [lyrics, setLyrics] = useState<SongLyrics | null>(null);
@@ -666,14 +666,16 @@ export default function FullScreenPlayer({
                                     height: "min(380px, 42vh)",
                                     borderRadius: "24px",
                                     overflow: "hidden",
-                                    backgroundColor: "rgba(255,255,255,0.05)",
                                     boxShadow: "0 28px 70px rgba(0,0,0,0.7), 0 0 50px rgba(0, 229, 204, 0.15)",
-                                    border: "1px solid rgba(255,255,255,0.18)",
                                     marginBottom: "24px"
                                 }}>
-                                    {albumArt && (
-                                        <img src={albumArt} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                                    )}
+                                    <Artwork
+                                        src={albumArt}
+                                        alt={currentTrack?.title || "Album Art"}
+                                        borderRadius={24}
+                                        iconSize={64}
+                                        showLabel="No artwork available"
+                                    />
                                 </div>
 
                                 <h2 style={{ fontSize: "1.75rem", fontWeight: "800", color: "#ffffff", margin: "0 0 6px 0", letterSpacing: "-0.4px" }}>
@@ -825,25 +827,20 @@ export default function FullScreenPlayer({
                             {formatTime(currentProgress)}
                         </span>
 
-                        <input
-                            type="range"
-                            min={0}
-                            max={duration || 100}
-                            step={0.1}
-                            value={currentProgress}
-                            onMouseDown={() => setIsScrubbing(true)}
-                            onTouchStart={() => setIsScrubbing(true)}
-                            onChange={e => setScrubValue(parseFloat(e.target.value))}
-                            onMouseUp={() => { setIsScrubbing(false); handleSeek(scrubValue); }}
-                            onTouchEnd={() => { setIsScrubbing(false); handleSeek(scrubValue); }}
-                            className="scrubber-slider"
-                            style={{
-                                flex: 1,
-                                height: "6px",
-                                borderRadius: "3px",
-                                background: `linear-gradient(to right, var(--primary) ${progressPercent}%, rgba(255,255,255,0.2) ${progressPercent}%)`,
-                                cursor: "pointer"
-                            }}
+                        <Seekbar
+                            progress={progress}
+                            duration={duration}
+                            onSeek={handleSeek}
+                            disabled={!currentTrack || duration <= 0}
+                            trackHeight={6}
+                            thumbSize={14}
+                            activeThumbSize={18}
+                            trackColor="rgba(255,255,255,0.2)"
+                            onScrubChange={(isScrubbing, value) => setScrubDisplay({
+                                isScrubbing,
+                                value,
+                                holdUntil: isScrubbing ? Date.now() + 10000 : Date.now() + 1200
+                            })}
                         />
 
                         <span style={{ fontSize: "0.82rem", color: "rgba(255,255,255,0.75)", fontVariantNumeric: "tabular-nums", width: "42px" }}>

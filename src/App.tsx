@@ -10,7 +10,7 @@ import {
   themePalettes,
   UserProfile
 } from "./types";
-import { getAlbumArtCached } from "./utils";
+import { getAlbumArtCached, getAlbumArtSynchronous } from "./utils";
 import TitleBar from "./components/TitleBar";
 import Sidebar from "./components/Sidebar";
 import Library from "./components/Library";
@@ -140,27 +140,31 @@ export default function App() {
   }
 
   // --- AUDIO FADE IN / FADE OUT HELPER ---
-  const isFadingRef = useRef(false);
+  const fadeIdRef = useRef(0);
   async function fadeAudio(fromVol: number, toVol: number, durationMs: number = 280) {
+    const currentFadeId = ++fadeIdRef.current;
     if (durationMs <= 0) {
       try {
         await invoke("set_volume", { volume: Math.max(0, Math.min(1, toVol / 100)) });
       } catch (e) {}
       return;
     }
-    if (isFadingRef.current) return;
-    isFadingRef.current = true;
-    const steps = 5;
+    const steps = 6;
     const stepTime = durationMs / steps;
     const delta = toVol - fromVol;
     for (let i = 1; i <= steps; i++) {
+      if (fadeIdRef.current !== currentFadeId) break;
       const val = fromVol + (delta * (i / steps));
       try {
         await invoke("set_volume", { volume: Math.max(0, Math.min(1, val / 100)) });
       } catch (e) {}
       await new Promise(res => setTimeout(res, stepTime));
     }
-    isFadingRef.current = false;
+    if (fadeIdRef.current === currentFadeId) {
+      try {
+        await invoke("set_volume", { volume: Math.max(0, Math.min(1, toVol / 100)) });
+      } catch (e) {}
+    }
   }
 
   // Refs for audio engine
@@ -180,10 +184,21 @@ export default function App() {
   isPlayingRef.current = isPlaying;
   const fadeDurationRef = useRef(fadeDuration);
   fadeDurationRef.current = fadeDuration;
+  const progressRef = useRef(progress);
+  progressRef.current = progress;
+  const playbackHistoryRef = useRef<Track[]>([]);
+  const artworkLoadIdRef = useRef<number>(0);
 
   // --- CORE AUDIO PLAY WITH FADE ---
-  async function handlePlayTrack(track: Track) {
+  async function handlePlayTrack(track: Track, addToHistory: boolean = true) {
     try {
+      if (addToHistory && currentTrackRef.current && currentTrackRef.current.path.toLowerCase() !== track.path.toLowerCase()) {
+        playbackHistoryRef.current.push(currentTrackRef.current);
+        if (playbackHistoryRef.current.length > 50) {
+          playbackHistoryRef.current.shift();
+        }
+      }
+
       const targetVol = volumeRef.current;
       const fDuration = fadeDurationRef.current;
 
@@ -195,13 +210,24 @@ export default function App() {
       setCurrentTrack(track);
       setIsPlaying(true);
       setProgress(0);
+      progressRef.current = 0;
+      endedTrackRef.current = null;
 
-      setAlbumArt(null);
-      void getAlbumArtCached(track.path).then(art => {
-        if (currentTrackRef.current?.path === track.path) {
-          setAlbumArt(art);
-        }
-      });
+      // Handle artwork immediately or safely in background
+      const loadId = ++artworkLoadIdRef.current;
+      const cachedArt = getAlbumArtSynchronous(track.path);
+      if (cachedArt !== undefined) {
+        setAlbumArt(cachedArt);
+      } else {
+        // Prevent stale artwork from prior track appearing while new track loads
+        setAlbumArt(null);
+        void getAlbumArtCached(track.path).then(art => {
+          // Drop stale responses if user skipped to a newer track
+          if (artworkLoadIdRef.current === loadId) {
+            setAlbumArt(art);
+          }
+        });
+      }
 
       if (fDuration > 0) {
         void fadeAudio(0, targetVol, fDuration);
@@ -209,7 +235,7 @@ export default function App() {
         try { await invoke("set_volume", { volume: targetVol / 100 }); } catch (e) {}
       }
 
-      setTracks(prev => prev.map(t => t.path === track.path
+      setTracks(prev => prev.map(t => t.path.toLowerCase() === track.path.toLowerCase()
         ? { ...t, playCount: (t.playCount || 0) + 1, lastPlayed: Date.now() }
         : t));
     } catch (error) {
@@ -260,7 +286,7 @@ export default function App() {
     }
   }
 
-  function playNext() {
+  function playNext(isAutoAdvance: boolean = false) {
     const allTracks = tracksRef.current;
     if (allTracks.length === 0) return;
 
@@ -270,8 +296,8 @@ export default function App() {
       return;
     }
 
-    if (repeatRef.current === "one") {
-      void handlePlayTrack(curr);
+    if (repeatRef.current === "one" && isAutoAdvance) {
+      void handlePlayTrack(curr, false);
       return;
     }
 
@@ -283,7 +309,7 @@ export default function App() {
     }
 
     if (shuffleRef.current) {
-      const candidates = allTracks.filter(t => t.path !== curr.path);
+      const candidates = allTracks.filter(t => t.path.toLowerCase() !== curr.path.toLowerCase());
       if (candidates.length > 0) {
         void handlePlayTrack(candidates[Math.floor(Math.random() * candidates.length)]);
       } else {
@@ -292,13 +318,25 @@ export default function App() {
       return;
     }
 
-    const currentIndex = allTracks.findIndex(t => t.path === curr.path);
+    const currPath = curr.path.toLowerCase();
+    const currentIndex = allTracks.findIndex(t => t.path.toLowerCase() === currPath);
     if (currentIndex >= 0 && currentIndex < allTracks.length - 1) {
       void handlePlayTrack(allTracks[currentIndex + 1]);
     } else {
-      void handlePlayTrack(allTracks[0]);
+      if (repeatRef.current === "all") {
+        void handlePlayTrack(allTracks[0]);
+      } else {
+        // Repeat off: stop at end of playlist
+        setIsPlaying(false);
+        setProgress(0);
+        progressRef.current = 0;
+        endedTrackRef.current = null;
+        try { invoke("stop_audio"); } catch (e) {}
+      }
     }
   }
+
+  const isSeekingUntilRef = useRef<number>(0);
 
   function playPrev() {
     const allTracks = tracksRef.current;
@@ -310,27 +348,66 @@ export default function App() {
       return;
     }
 
-    if (progress > 3) {
-      void invoke("seek_to", { position: 0 });
-      setProgress(0);
+    // 1. Shuffle Mode: pop last played track from history, or pick a random candidate
+    if (shuffleRef.current) {
+      if (playbackHistoryRef.current.length > 0) {
+        const prevTrack = playbackHistoryRef.current.pop()!;
+        void handlePlayTrack(prevTrack, false);
+        return;
+      }
+      const candidates = allTracks.filter(t => t.path.toLowerCase() !== curr.path.toLowerCase());
+      if (candidates.length > 0) {
+        void handlePlayTrack(candidates[Math.floor(Math.random() * candidates.length)]);
+      } else {
+        void handlePlayTrack(allTracks[0]);
+      }
       return;
     }
 
-    const currentIndex = allTracks.findIndex(t => t.path === curr.path);
+    // 2. Sequential Playlist Navigation (Shuffle OFF):
+    const currPath = curr.path.toLowerCase();
+    const currentIndex = allTracks.findIndex(t => t.path.toLowerCase() === currPath);
+
     if (currentIndex > 0) {
+      // Navigate to and start the previous track in the playlist
       void handlePlayTrack(allTracks[currentIndex - 1]);
+    } else if (currentIndex === 0) {
+      // First track in playlist:
+      if (repeatRef.current === "all") {
+        // Wrap around to the last track in the playlist
+        void handlePlayTrack(allTracks[allTracks.length - 1]);
+      } else {
+        // Restart the current track from 0:00
+        void handlePlayTrack(allTracks[0], false);
+      }
     } else {
-      void handlePlayTrack(allTracks[allTracks.length - 1]);
+      // Track not found in current list: check history or default to first track
+      if (playbackHistoryRef.current.length > 0) {
+        const prevTrack = playbackHistoryRef.current.pop()!;
+        void handlePlayTrack(prevTrack, false);
+      } else {
+        void handlePlayTrack(allTracks[0]);
+      }
     }
   }
 
   async function handleSeek(targetTime: number) {
-    if (!currentTrack) return;
-    setProgress(targetTime);
+    if (!currentTrack || !isFinite(targetTime) || targetTime < 0) return;
+    const dur = currentTrack.duration || 0;
+    const clampedTime = dur > 0 ? Math.min(dur, Math.max(0, targetTime)) : Math.max(0, targetTime);
+    
+    // Set optimistic position immediately and lock polling updates for 1s
+    setProgress(clampedTime);
+    progressRef.current = clampedTime;
+    isSeekingUntilRef.current = Date.now() + 1000;
+
+    if (dur > 0 && clampedTime < dur - 1) {
+      endedTrackRef.current = null;
+    }
     try {
-      await invoke("seek_to", { position: targetTime });
+      await invoke("seek_to", { position: clampedTime });
     } catch (err) {
-      notify(`Seek failed: ${String(err)}`);
+      console.warn("Seek error:", err);
     }
   }
 
@@ -462,12 +539,17 @@ export default function App() {
     if (isPlaying && currentTrack) {
       interval = window.setInterval(async () => {
         try {
+          if (Date.now() < isSeekingUntilRef.current) {
+            return; // Skip polling while seek settles to prevent scrubber snapback
+          }
           const pos = await invoke<number>("get_playback_position");
           setProgress(pos);
+          progressRef.current = pos;
 
-          if (currentTrack.duration > 0 && pos >= currentTrack.duration - 0.4 && endedTrackRef.current !== currentTrack.path) {
-            endedTrackRef.current = currentTrack.path;
-            playNext();
+          const currPath = currentTrack.path.toLowerCase();
+          if (currentTrack.duration > 0 && pos >= currentTrack.duration - 0.4 && endedTrackRef.current !== currPath) {
+            endedTrackRef.current = currPath;
+            playNext(true);
           }
         } catch (err) {}
       }, 250);

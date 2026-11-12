@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Track } from "../types";
-import { getAlbumArtCached } from "../utils";
+import { getAlbumArtCached, getAlbumArtSynchronous } from "../utils";
+import Artwork from "./Artwork";
 
 interface ArtistsViewProps {
     tracks: Track[];
@@ -26,16 +27,34 @@ export default function ArtistsView({ tracks, handlePlayTrack }: ArtistsViewProp
         let isMounted = true;
         async function loadAvatars() {
             const loaded: Record<string, string> = {};
-            for (const [name, data] of sortedArtists.slice(0, 30)) {
+            const fetchPromises: Promise<void>[] = [];
+
+            for (const [name, data] of sortedArtists.slice(0, 40)) {
                 if (!avatars[name]) {
-                    const art = await getAlbumArtCached(data.sampleTrack.path);
-                    if (art) loaded[name] = art;
+                    const syncHit = getAlbumArtSynchronous(data.sampleTrack.path);
+                    if (syncHit !== undefined) {
+                        if (syncHit) loaded[name] = syncHit;
+                    } else {
+                        fetchPromises.push(
+                            getAlbumArtCached(data.sampleTrack.path).then(art => {
+                                if (art && isMounted) {
+                                    setAvatars(prev => ({ ...prev, [name]: art }));
+                                }
+                            })
+                        );
+                    }
                 }
             }
+
             if (isMounted && Object.keys(loaded).length > 0) {
                 setAvatars(prev => ({ ...prev, ...loaded }));
             }
+
+            if (fetchPromises.length > 0) {
+                await Promise.all(fetchPromises);
+            }
         }
+
         if (sortedArtists.length > 0) void loadAvatars();
         return () => { isMounted = false; };
     }, [tracks]);
@@ -92,16 +111,14 @@ export default function ArtistsView({ tracks, handlePlayTrack }: ArtistsViewProp
                                 border: "2px solid var(--border)",
                                 boxShadow: "0 8px 20px rgba(0,0,0,0.18)"
                             }}>
-                                {art ? (
-                                    <img src={art} alt={name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                                ) : (
-                                    <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)" }}>
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="32" height="32">
-                                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                                            <circle cx="12" cy="7" r="4"></circle>
-                                        </svg>
-                                    </div>
-                                )}
+                                <Artwork
+                                    src={art || null}
+                                    alt={name}
+                                    width="100%"
+                                    height="100%"
+                                    borderRadius="50%"
+                                    iconSize={32}
+                                />
                             </div>
                             <strong style={{ fontSize: "0.92rem", color: "var(--text-dark)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", width: "100%" }}>
                                 {name}

@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { Track } from "../types";
-import { getAlbumArtCached } from "../utils";
+import { getAlbumArtCached, getAlbumArtSynchronous } from "../utils";
 import LyricsView from "./LyricsView";
+import Artwork from "./Artwork";
 
 interface TopArtistsPanelProps {
     tracks: Track[];
@@ -35,8 +36,24 @@ export default function TopArtistsPanel({
     onOpenFullScreen
 }: TopArtistsPanelProps) {
     const [artistAvatars, setArtistAvatars] = useState<Record<string, string>>({});
+    const [featuredArt, setFeaturedArt] = useState<string | null>(null);
 
     const displayTrack = currentTrack || tracks[0] || null;
+
+    useEffect(() => {
+        if (!currentTrack && displayTrack) {
+            const cached = getAlbumArtSynchronous(displayTrack.path);
+            if (cached !== undefined) {
+                setFeaturedArt(cached);
+            } else {
+                void getAlbumArtCached(displayTrack.path).then(art => {
+                    setFeaturedArt(art);
+                });
+            }
+        }
+    }, [currentTrack, displayTrack?.path]);
+
+    const activeCoverArt = currentTrack ? currentAlbumArt : featuredArt;
 
     // Group tracks by artist
     const artistMap = tracks.reduce((acc, track) => {
@@ -58,14 +75,28 @@ export default function TopArtistsPanel({
         let isMounted = true;
         async function loadAvatars() {
             const loaded: Record<string, string> = {};
+            const fetchPromises: Promise<void>[] = [];
             for (const [artistName, data] of sortedArtists) {
                 if (!artistAvatars[artistName]) {
-                    const art = await getAlbumArtCached(data.sampleTrack.path);
-                    if (art) loaded[artistName] = art;
+                    const syncHit = getAlbumArtSynchronous(data.sampleTrack.path);
+                    if (syncHit !== undefined) {
+                        if (syncHit) loaded[artistName] = syncHit;
+                    } else {
+                        fetchPromises.push(
+                            getAlbumArtCached(data.sampleTrack.path).then(art => {
+                                if (art && isMounted) {
+                                    setArtistAvatars(prev => ({ ...prev, [artistName]: art }));
+                                }
+                            })
+                        );
+                    }
                 }
             }
             if (isMounted && Object.keys(loaded).length > 0) {
                 setArtistAvatars(prev => ({ ...prev, ...loaded }));
+            }
+            if (fetchPromises.length > 0) {
+                await Promise.all(fetchPromises);
             }
         }
         if (sortedArtists.length > 0) {
@@ -167,13 +198,8 @@ export default function TopArtistsPanel({
                         aspectRatio: "1 / 1",
                         borderRadius: "14px",
                         overflow: "hidden",
-                        backgroundColor: "var(--surface-solid)",
                         boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
                         marginBottom: "12px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        border: "1px solid var(--border)",
                         cursor: onOpenFullScreen ? "pointer" : "default",
                         transition: "transform 0.2s ease"
                     }}
@@ -184,24 +210,13 @@ export default function TopArtistsPanel({
                         if (onOpenFullScreen) e.currentTarget.style.transform = "scale(1)";
                     }}
                 >
-                    {currentAlbumArt ? (
-                        <img src={currentAlbumArt} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                    ) : (
-                        <div style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            alignItems: "center",
-                            gap: "8px",
-                            color: "var(--text-muted)",
-                            opacity: 0.6
-                        }}>
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="48" height="48">
-                                <circle cx="12" cy="12" r="10"></circle>
-                                <circle cx="12" cy="12" r="3"></circle>
-                            </svg>
-                            <span style={{ fontSize: "0.74rem" }}>No artwork</span>
-                        </div>
-                    )}
+                    <Artwork
+                        src={activeCoverArt}
+                        alt={displayTrack?.title || "Cover Art"}
+                        borderRadius={14}
+                        iconSize={48}
+                        showLabel="No artwork"
+                    />
                 </div>
 
                 <div style={{ fontWeight: "700", fontSize: "0.95rem", color: "var(--text-dark)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -278,27 +293,14 @@ export default function TopArtistsPanel({
                                 onMouseOver={e => e.currentTarget.style.backgroundColor = "var(--surface-hover)"}
                                 onMouseOut={e => e.currentTarget.style.backgroundColor = "transparent"}
                             >
-                                <div style={{
-                                    width: "38px",
-                                    height: "38px",
-                                    borderRadius: "50%",
-                                    overflow: "hidden",
-                                    backgroundColor: "var(--surface-solid)",
-                                    flexShrink: 0,
-                                    border: "1px solid var(--border)",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center"
-                                }}>
-                                    {avatar ? (
-                                        <img src={avatar} alt={artistName} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                                    ) : (
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2" width="18" height="18">
-                                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                                            <circle cx="12" cy="7" r="4"></circle>
-                                        </svg>
-                                    )}
-                                </div>
+                                <Artwork
+                                    src={avatar}
+                                    alt={artistName}
+                                    width={38}
+                                    height={38}
+                                    borderRadius="50%"
+                                    iconSize={16}
+                                />
 
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                     <div style={{ fontSize: "0.85rem", fontWeight: "600", color: "var(--text-dark)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>

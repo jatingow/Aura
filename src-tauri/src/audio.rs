@@ -1,4 +1,4 @@
-use rodio::{Decoder, DeviceSinkBuilder, MixerDeviceSink, Player};
+use rodio::{Decoder, DeviceSinkBuilder, MixerDeviceSink, Player, Source};
 use std::fs::File;
 use std::io::BufReader;
 use std::sync::Mutex;
@@ -9,6 +9,8 @@ use tauri::State;
 pub struct AudioState {
     pub player: Mutex<Option<Player>>,
     pub _stream: Mutex<Option<MixerDeviceSink>>,
+    pub current_path: Mutex<Option<String>>,
+    pub seek_offset: Mutex<f64>,
 }
 
 impl Default for AudioState {
@@ -24,6 +26,8 @@ impl Default for AudioState {
         Self {
             player: Mutex::new(player),
             _stream: Mutex::new(stream),
+            current_path: Mutex::new(None),
+            seek_offset: Mutex::new(0.0),
         }
     }
 }
@@ -31,9 +35,16 @@ impl Default for AudioState {
 #[tauri::command]
 pub fn play_audio(path: String, state: State<'_, AudioState>) -> Result<(), String> {
     let file = File::open(&path).map_err(|error| format!("Could not open audio file: {error}"))?;
+    let len = file.metadata().ok().map(|m| m.len());
     let reader = BufReader::new(file);
-    let source =
-        Decoder::try_from(reader).map_err(|error| format!("Could not decode audio file: {error}"))?;
+    let mut builder = Decoder::builder().with_data(reader).with_seekable(true);
+    if let Some(l) = len {
+        builder = builder.with_byte_len(l);
+    }
+    let source = builder.build().or_else(|_| {
+        let f2 = File::open(&path).map_err(|e| format!("Could not open audio file: {e}"))?;
+        Decoder::try_from(BufReader::new(f2)).map_err(|e| format!("Could not decode audio file: {e}"))
+    })?;
 
     let player_guard = state.player.lock().unwrap();
     let player = player_guard
@@ -42,6 +53,9 @@ pub fn play_audio(path: String, state: State<'_, AudioState>) -> Result<(), Stri
     player.stop();
     player.append(source);
     player.play();
+
+    *state.current_path.lock().unwrap() = Some(path);
+    *state.seek_offset.lock().unwrap() = 0.0;
     Ok(())
 }
 
@@ -71,6 +85,7 @@ pub fn stop_audio(state: State<'_, AudioState>) -> Result<(), String> {
     if let Some(player) = player_guard.as_ref() {
         player.stop();
     }
+    *state.seek_offset.lock().unwrap() = 0.0;
     Ok(())
 }
 
@@ -79,29 +94,19 @@ pub fn seek_by(state: State<'_, AudioState>, offset: f64) -> Result<(), String> 
     if !offset.is_finite() {
         return Err("Seek offset must be finite.".to_string());
     }
-    let player_guard = state.player.lock().unwrap();
-    let player = player_guard
-        .as_ref()
-        .ok_or_else(|| "No Windows audio device is available.".to_string())?;
-    let current_pos = player.get_pos();
-    let new_pos = if offset >= 0.0 {
-        current_pos.saturating_add(Duration::from_secs_f64(offset))
-    } else {
-        current_pos.saturating_sub(Duration::from_secs_f64(offset.abs()))
-    };
-    player
-        .try_seek(new_pos)
-        .map_err(|error| format!("Could not seek: {error}"))?;
-    Ok(())
+    let current_pos = get_playback_position(state.clone());
+    let target_pos = (current_pos + offset).max(0.0);
+    seek_to(state, target_pos)
 }
 
 #[tauri::command]
 pub fn get_playback_position(state: State<'_, AudioState>) -> f64 {
     let player_guard = state.player.lock().unwrap();
+    let offset = *state.seek_offset.lock().unwrap();
     if let Some(player) = player_guard.as_ref() {
-        player.get_pos().as_secs_f64()
+        offset + player.get_pos().as_secs_f64()
     } else {
-        0.0
+        offset
     }
 }
 
@@ -114,10 +119,42 @@ pub fn seek_to(state: State<'_, AudioState>, position: f64) -> Result<(), String
     let player = player_guard
         .as_ref()
         .ok_or_else(|| "No Windows audio device is available.".to_string())?;
-    player
-        .try_seek(Duration::from_secs_f64(position))
-        .map_err(|error| format!("Could not seek: {error}"))?;
-    Ok(())
+    
+    let target_dur = Duration::from_secs_f64(position);
+
+    // 1. Attempt native Player try_seek first
+    if player.try_seek(target_dur).is_ok() {
+        *state.seek_offset.lock().unwrap() = 0.0;
+        return Ok(());
+    }
+
+    // 2. Fallback: If in-place try_seek on sink fails, reload the file seeked to target_dur
+    let current_path = state.current_path.lock().unwrap().clone();
+    if let Some(path) = current_path {
+        if let Ok(file) = File::open(&path) {
+            let len = file.metadata().ok().map(|m| m.len());
+            let reader = BufReader::new(file);
+            let mut builder = Decoder::builder().with_data(reader).with_seekable(true);
+            if let Some(l) = len {
+                builder = builder.with_byte_len(l);
+            }
+            if let Ok(mut source) = builder.build() {
+                let _ = source.try_seek(target_dur);
+                let was_paused = player.is_paused();
+                player.stop();
+                player.append(source);
+                if was_paused {
+                    player.pause();
+                } else {
+                    player.play();
+                }
+                *state.seek_offset.lock().unwrap() = position;
+                return Ok(());
+            }
+        }
+    }
+
+    Err("Could not seek in current audio track.".to_string())
 }
 
 #[tauri::command]

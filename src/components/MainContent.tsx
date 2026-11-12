@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Track, theme } from "../types";
-import { formatTime, getAlbumArtCached } from "../utils";
+import { formatTime, getAlbumArtCached, getAlbumArtSynchronous } from "../utils";
+import Artwork from "./Artwork";
 
 interface MainContentProps {
     tracks: Track[];
@@ -50,15 +51,22 @@ export default function MainContent({
         .sort((a, b) => (b.playCount || 0) - (a.playCount || 0))
         .slice(0, 10);
 
-    const albums = Array.from(new Set(filteredTracks.map(t => t.album || t.title)))
-        .map(albumName => filteredTracks.find(t => (t.album || t.title) === albumName)!)
-        .filter(Boolean)
-        .slice(0, 8);
+    // Group albums uniquely by artist + album name so distinct albums never collide
+    const uniqueAlbumKeys = new Set<string>();
+    const albums: Track[] = [];
+    for (const t of filteredTracks) {
+        const key = `${t.artist} - ${t.album || t.title}`.toLowerCase();
+        if (!uniqueAlbumKeys.has(key)) {
+            uniqueAlbumKeys.add(key);
+            albums.push(t);
+            if (albums.length >= 8) break;
+        }
+    }
 
     const heroTrack = currentTrack || popularTracks[0] || filteredTracks[0] || null;
     const isHeroFavorite = heroTrack ? favorites.includes(heroTrack.path) : false;
 
-    // Load artwork only for hero, top albums, and top popular tracks
+    // Load artwork for visible items efficiently in parallel
     useEffect(() => {
         let isMounted = true;
         async function loadVisibleArt() {
@@ -69,15 +77,32 @@ export default function MainContent({
             ];
 
             const newArt: Record<string, string> = {};
+            const fetchPromises: Promise<void>[] = [];
+
             for (const track of tracksToLoad) {
-                if (!albumArtCache[track.path]) {
-                    const art = await getAlbumArtCached(track.path);
-                    if (art) newArt[track.path] = art;
+                const normPath = track.path.toLowerCase();
+                if (albumArtCache[normPath] === undefined) {
+                    const syncHit = getAlbumArtSynchronous(track.path);
+                    if (syncHit !== undefined) {
+                        if (syncHit) newArt[normPath] = syncHit;
+                    } else {
+                        fetchPromises.push(
+                            getAlbumArtCached(track.path).then(art => {
+                                if (art && isMounted) {
+                                    setAlbumArtCache(prev => ({ ...prev, [normPath]: art }));
+                                }
+                            })
+                        );
+                    }
                 }
             }
 
             if (isMounted && Object.keys(newArt).length > 0) {
                 setAlbumArtCache(prev => ({ ...prev, ...newArt }));
+            }
+
+            if (fetchPromises.length > 0) {
+                await Promise.all(fetchPromises);
             }
         }
 
@@ -363,29 +388,19 @@ export default function MainContent({
                         boxShadow: "0 16px 40px rgba(0,0,0,0.35)",
                         zIndex: 1
                     }}>
-                        {(currentTrack?.path === heroTrack.path && currentAlbumArt) || albumArtCache[heroTrack.path] ? (
-                            <img
-                                src={currentTrack?.path === heroTrack.path && currentAlbumArt ? currentAlbumArt : albumArtCache[heroTrack.path]}
-                                alt=""
-                                style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                            />
-                        ) : (
-                            <div style={{
-                                width: "100%",
-                                height: "100%",
-                                background: "linear-gradient(135deg, var(--surface-solid), var(--bg))",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                color: "var(--text-muted)"
-                            }}>
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="48" height="48" style={{ opacity: 0.5 }}>
-                                    <path d="M9 18V5l12-2v13"></path>
-                                    <circle cx="6" cy="18" r="3"></circle>
-                                    <circle cx="18" cy="16" r="3"></circle>
-                                </svg>
-                            </div>
-                        )}
+                        <Artwork
+                            src={
+                                currentTrack && currentTrack.path.toLowerCase() === heroTrack.path.toLowerCase()
+                                    ? currentAlbumArt
+                                    : albumArtCache[heroTrack.path.toLowerCase()] || null
+                            }
+                            alt={heroTrack.title}
+                            width="100%"
+                            height="100%"
+                            borderRadius={20}
+                            iconSize={48}
+                            sublabel="No Artwork"
+                        />
                     </div>
                 </div>
             )}
@@ -421,7 +436,6 @@ export default function MainContent({
                     }}
                 >
                     {albums.map(track => {
-                        const art = albumArtCache[track.path];
                         return (
                             <div
                                 key={track.path}
@@ -444,16 +458,14 @@ export default function MainContent({
                                     marginBottom: "10px",
                                     boxShadow: "0 6px 16px rgba(0,0,0,0.18)"
                                 }}>
-                                    {art ? (
-                                        <img src={art} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                                    ) : (
-                                        <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)" }}>
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="36" height="36" style={{ opacity: 0.5 }}>
-                                                <circle cx="12" cy="12" r="10"></circle>
-                                                <circle cx="12" cy="12" r="3"></circle>
-                                            </svg>
-                                        </div>
-                                    )}
+                                    <Artwork
+                                        src={albumArtCache[track.path.toLowerCase()] || null}
+                                        alt={track.album || track.title}
+                                        width="100%"
+                                        height="100%"
+                                        borderRadius={14}
+                                        iconSize={36}
+                                    />
                                 </div>
                                 <div style={{
                                     fontSize: "0.85rem",
@@ -503,7 +515,6 @@ export default function MainContent({
                         const rankNum = String(idx + 1).padStart(2, "0");
                         const isCurrent = currentTrack?.path === track.path;
                         const isFav = favorites.includes(track.path);
-                        const art = albumArtCache[track.path];
 
                         return (
                             <div
@@ -523,25 +534,15 @@ export default function MainContent({
                                 </span>
 
                                 {/* Mini Album Thumbnail */}
-                                <div style={{
-                                    width: "40px",
-                                    height: "40px",
-                                    borderRadius: "10px",
-                                    overflow: "hidden",
-                                    backgroundColor: "var(--surface-solid)",
-                                    marginRight: "14px",
-                                    flexShrink: 0
-                                }}>
-                                    {art ? (
-                                        <img src={art} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                                    ) : (
-                                        <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)" }}>
-                                            <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style={{ opacity: 0.5 }}>
-                                                <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
-                                            </svg>
-                                        </div>
-                                    )}
-                                </div>
+                                <Artwork
+                                    src={albumArtCache[track.path.toLowerCase()] || null}
+                                    alt={track.title}
+                                    width={40}
+                                    height={40}
+                                    borderRadius={10}
+                                    iconSize={18}
+                                    style={{ marginRight: "14px", flexShrink: 0 }}
+                                />
 
                                 {/* Title & Artist */}
                                 <div style={{ flex: 1.5, minWidth: 0 }}>
