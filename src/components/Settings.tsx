@@ -105,9 +105,35 @@ export default function Settings({
                     </span>
                     <div style={{ display: "flex", gap: "12px" }}>
                         {[
-                            { id: "dark", label: "Dark Slate", icon: "🌙" },
-                            { id: "amoled", label: "AMOLED Black", icon: "🖤" },
-                            { id: "light", label: "Alabaster Light", icon: "☀️" },
+                            {
+                                id: "dark",
+                                label: "Dark Slate",
+                                icon: (
+                                    <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z" />
+                                    </svg>
+                                )
+                            },
+                            {
+                                id: "amoled",
+                                label: "AMOLED Black",
+                                icon: (
+                                    <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <circle cx="12" cy="12" r="7" />
+                                        <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" />
+                                    </svg>
+                                )
+                            },
+                            {
+                                id: "light",
+                                label: "Alabaster Light",
+                                icon: (
+                                    <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                                        <circle cx="12" cy="12" r="4" />
+                                        <path d="M12 2v2.5M12 19.5V22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M2 12h2.5M19.5 12H22M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8" />
+                                    </svg>
+                                )
+                            },
                         ].map(t => {
                             const isSelected = baseTheme === t.id;
                             return (
@@ -129,7 +155,9 @@ export default function Settings({
                                         transition: "all 0.18s ease"
                                     }}
                                 >
-                                    <span>{t.icon}</span>
+                                    <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "16px", height: "16px" }}>
+                                        {t.icon}
+                                    </span>
                                     <span>{t.label}</span>
                                 </button>
                             );
